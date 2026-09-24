@@ -1,0 +1,24 @@
+{
+  "name": "better-router",
+  "private": true,
+  "packageManager": "yarn@4.18.0",
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "check": "yarn build && tsc -b --pretty false && tsc -p type-tests/tsconfig.json --pretty false && yarn test-types && yarn test:runtime",
+    "generate:openresponses": "node scripts/generate-openresponses.mjs",
+    "test-types": "tstyche",
+    "test:runtime": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "tsdown": "0.23.0",
+    "tstyche": "^7.2.5",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "effect": "4.0.0-rc.117"
+  }
+}

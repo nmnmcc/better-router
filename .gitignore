@@ -1,0 +1,7 @@
+.devenv/
+.direnv/
+node_modules/
+.yarn/install-state.gz
+dist/
+.types/
+*.tsbuildinfo

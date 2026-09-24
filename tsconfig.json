@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/core" },
+    { "path": "packages/plugin-openai-chat-completions" },
+    { "path": "packages/plugin-openai-responses" },
+    { "path": "packages/plugin-anthropic-messages" },
+    { "path": "examples/chat-completions-gateway" }
+  ]
+}

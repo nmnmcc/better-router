@@ -1,0 +1,10 @@
+[formatter.prettier]
+command = "prettier"
+options = ["--write"]
+includes = ["*.ts", "*.mts", "*.js", "*.mjs", "*.json", "*.md", "*.yml", "*.yaml"]
+excludes = ["references/**", "yarn.lock", "devenv.lock"]
+
+[formatter.nixfmt]
+command = "nixfmt"
+includes = ["*.nix"]
+excludes = ["references/**"]

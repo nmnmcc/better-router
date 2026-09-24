@@ -1,0 +1,12 @@
+[submodule "references/better-auth"]
+	path = references/better-auth
+	url = https://github.com/better-auth/better-auth.git
+[submodule "references/effect"]
+	path = references/effect
+	url = https://github.com/Effect-TS/effect.git
+[submodule "references/litellm"]
+	path = references/litellm
+	url = https://github.com/BerriAI/litellm.git
+[submodule "references/opencode"]
+	path = references/opencode
+	url = https://github.com/anomalyco/opencode.git
