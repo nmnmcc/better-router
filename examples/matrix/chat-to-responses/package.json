@@ -1,0 +1,15 @@
+{
+  "name": "@better-router/example-matrix-chat-to-responses",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@better-router/example-matrix-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}

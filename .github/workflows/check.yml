@@ -1,0 +1,31 @@
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - name: Install devenv
+        run: nix profile add nixpkgs#devenv
+      - name: Install dependencies
+        run: devenv shell -- yarn install --immutable
+      - name: Build and test
+        run: devenv shell -- yarn check
+      - name: Coverage
+        run: devenv shell -- yarn test:coverage
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: error

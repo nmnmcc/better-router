@@ -5,7 +5,7 @@ import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
 import { Router } from "@better-router/core"
 import { OpenAIChatCompletionsPlugin } from "@better-router/plugin-openai-chat-completions"
 import { OpenAIResponses, OpenAIResponsesPlugin } from "@better-router/plugin-openai-responses"
-import { Config, Effect, Layer, Redacted } from "effect"
+import { Config, Effect, Layer, Schema } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 
 const settings = Config.all({
@@ -17,24 +17,22 @@ const settings = Config.all({
   host: Config.String("GATEWAY_HOST").pipe(Config.withDefault("127.0.0.1")),
   port: Config.Int("GATEWAY_PORT").pipe(Config.withDefault(8787)),
 })
+const HostConfig = Schema.Struct({
+  apiKey: Schema.Redacted(Schema.NonEmptyString), gatewayKey: Schema.Redacted(Schema.NonEmptyString),
+  upstreamModel: Schema.NonEmptyString, publicModel: Schema.String, url: Schema.URL,
+  host: Schema.NonEmptyString, port: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })),
+})
 
 const server = Layer.unwrap(
   Effect.gen(function* () {
-    const config = yield* settings
-    if (!Redacted.value(config.apiKey) || !Redacted.value(config.gatewayKey) || !config.upstreamModel || config.port < 0 || config.port > 65535) {
-      return yield* Effect.fail(new Error("Valid OPENAI_API_KEY, GATEWAY_API_KEY, OPENAI_MODEL, and GATEWAY_PORT are required"))
-    }
+    const config = yield* settings.pipe(Effect.flatMap(Schema.decodeUnknownEffect(HostConfig)))
     const publicModel = config.publicModel || config.upstreamModel
     const chatCompletions = OpenAIChatCompletionsPlugin.make({ gatewayKey: config.gatewayKey })
+    const deployment = yield* Effect.fromResult(OpenAIResponses.make({
+      id: "openai-main", model: config.upstreamModel, apiKey: config.apiKey, url: config.url,
+    }))
     const responses = OpenAIResponsesPlugin.make({
-      deployments: [
-        OpenAIResponses.make({
-          id: "openai-main",
-          model: config.upstreamModel,
-          apiKey: config.apiKey,
-          url: config.url,
-        }),
-      ],
+      deployments: [deployment],
     })
     const routes = Layer.unwrap(
       Router.make({

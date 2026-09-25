@@ -3,5 +3,6 @@
 node_modules/
 .yarn/install-state.gz
 dist/
+coverage/
 .types/
 *.tsbuildinfo

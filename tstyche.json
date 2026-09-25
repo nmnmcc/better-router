@@ -1,5 +1,5 @@
 {
-  "testFileMatch": ["type-tests/**/*.tst.mts"],
+  "testFileMatch": ["typetest/**/*.tst.ts", "packages/*/typetest/**/*.tst.ts"],
   "target": "6.0.3",
-  "tsconfig": "type-tests/tsconfig.json"
+  "tsconfig": "typetest/tsconfig.json"
 }

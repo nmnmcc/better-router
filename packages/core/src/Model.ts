@@ -6,6 +6,11 @@ type Schemas = components["schemas"]
 type CreateResponse = Schemas["CreateResponseBody"]
 type StandardEvent = operations["createResponse"]["responses"][200]["content"]["text/event-stream"]
 
+export type DeepReadonly<T> = T extends (...args: never[]) => unknown ? T
+  : T extends readonly (infer Item)[] ? readonly DeepReadonly<Item>[]
+  : T extends object ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+  : T
+
 /** Extension identifiers must use an implementor prefix, e.g. "acme:search_result". */
 export type ExtensionType = `${string}:${string}`
 
@@ -29,21 +34,21 @@ export interface ExtensionEvent {
   readonly [key: string]: unknown
 }
 
-export type InputItem = Schemas["ItemParam"] | ExtensionItem
-export type OutputItem = Schemas["ItemField"] | ExtensionItem
-export type ModelTool = Schemas["ResponsesToolParam"] | ExtensionTool
+export type InputItem = DeepReadonly<Schemas["ItemParam"]> | ExtensionItem
+export type OutputItem = DeepReadonly<Schemas["ItemField"]> | ExtensionItem
+export type ModelTool = DeepReadonly<Schemas["ResponsesToolParam"]> | ExtensionTool
 
 /** OpenResponses create body with the router's public model alias required. */
-export type ModelRequest = Omit<CreateResponse, "model" | "input" | "tools"> & {
+export type ModelRequest = DeepReadonly<Omit<CreateResponse, "model" | "input" | "tools">> & {
   readonly model: ModelName
   readonly input?: string | readonly InputItem[] | null
   readonly tools?: readonly ModelTool[] | null
 }
 
 /** The full OpenResponses response, including ordered output items and metadata. */
-export type ModelResponse = Omit<Schemas["ResponseResource"], "output" | "tools"> & {
+export type ModelResponse = DeepReadonly<Omit<Schemas["ResponseResource"], "output" | "tools">> & {
   readonly output: readonly OutputItem[]
-  readonly tools: readonly (Schemas["Tool"] | ExtensionTool)[]
+  readonly tools: readonly (DeepReadonly<Schemas["Tool"]> | ExtensionTool)[]
 }
 
 type WithExtensions<Event> = Event extends { readonly response: unknown }
@@ -53,4 +58,4 @@ type WithExtensions<Event> = Event extends { readonly response: unknown }
     : Event
 
 /** OpenResponses semantic events, with namespaced extensions kept opaque. */
-export type ModelEvent = WithExtensions<StandardEvent> | ExtensionEvent
+export type ModelEvent = DeepReadonly<WithExtensions<StandardEvent>> | ExtensionEvent

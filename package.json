@@ -1,22 +1,31 @@
 {
   "name": "better-router",
   "private": true,
+  "type": "module",
   "packageManager": "yarn@4.18.0",
   "workspaces": [
     "packages/*",
-    "examples/*"
+    "examples/*",
+    "examples/matrix/*"
   ],
   "scripts": {
     "build": "tsdown",
-    "check": "yarn build && tsc -b --pretty false && tsc -p type-tests/tsconfig.json --pretty false && yarn test-types && yarn test:runtime",
+    "check": "yarn build && tsc -b --pretty false && tsc -p typetest/tsconfig.json --pretty false && tsc -p tsconfig.runtime-tests.json --pretty false && yarn test-types && vitest run",
     "generate:openresponses": "node scripts/generate-openresponses.mjs",
     "test-types": "tstyche",
-    "test:runtime": "node --test tests/*.test.mjs"
+    "test:runtime": "yarn build && vitest run",
+    "test:coverage": "yarn build && vitest run --coverage"
   },
   "devDependencies": {
+    "@effect/platform-node": "4.0.0-rc.117",
+    "@effect/vitest": "4.0.0-rc.117",
+    "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "5.0.1",
     "tsdown": "0.23.0",
     "tstyche": "^7.2.5",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "5.0.1"
   },
   "dependencies": {
     "effect": "4.0.0-rc.117"

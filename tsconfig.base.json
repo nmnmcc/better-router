@@ -5,6 +5,7 @@
     "lib": ["ES2022", "DOM"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "strict": true,
     "exactOptionalPropertyTypes": true,
