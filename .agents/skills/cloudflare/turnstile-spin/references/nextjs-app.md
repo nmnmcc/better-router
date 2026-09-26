@@ -63,11 +63,7 @@ export default function SignupPage() {
 
   return (
     <>
-      <Script
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-        strategy="afterInteractive"
-        onReady={renderTurnstile}
-      />
+      <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" strategy="afterInteractive" onReady={renderTurnstile} />
       <form onSubmit={handleSubmit}>
         <input name="email" type="email" required />
         <div ref={turnstileContainer} />
@@ -110,12 +106,7 @@ export async function POST(req: Request) {
     }),
   })
   const result = await r.json()
-  if (
-    r.ok !== true ||
-    result.success !== true ||
-    result.action !== "signup" ||
-    !expectedHostnames.has(result.hostname)
-  ) {
+  if (r.ok !== true || result.success !== true || result.action !== "signup" || !expectedHostnames.has(result.hostname)) {
     return new Response("forbidden", { status: 403 })
   }
 
@@ -159,12 +150,7 @@ export async function submitSignup(_previousState: SignupState, formData: FormDa
     }),
   })
   const result = await r.json()
-  if (
-    r.ok !== true ||
-    result.success !== true ||
-    result.action !== "signup" ||
-    !expectedHostnames.has(result.hostname)
-  ) {
+  if (r.ok !== true || result.success !== true || result.action !== "signup" || !expectedHostnames.has(result.hostname)) {
     return { error: "Verification failed" }
   }
 
@@ -224,11 +210,7 @@ export default function SignupPage() {
 
   return (
     <>
-      <Script
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-        strategy="afterInteractive"
-        onReady={renderTurnstile}
-      />
+      <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" strategy="afterInteractive" onReady={renderTurnstile} />
       <form action={action}>
         <input name="email" type="email" required />
         <div ref={turnstileContainer} />

@@ -67,12 +67,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
     }),
   })
   const result = await verify.json()
-  if (
-    verify.ok !== true ||
-    result.success !== true ||
-    result.action !== "signup" ||
-    !expectedHostnames.has(result.hostname)
-  ) {
+  if (verify.ok !== true || result.success !== true || result.action !== "signup" || !expectedHostnames.has(result.hostname)) {
     return new Response("forbidden", { status: 403 })
   }
 
@@ -115,12 +110,7 @@ export const server = {
         }),
       })
       const result = await verify.json()
-      if (
-        verify.ok !== true ||
-        result.success !== true ||
-        result.action !== "signup" ||
-        !expectedHostnames.has(result.hostname)
-      ) {
+      if (verify.ok !== true || result.success !== true || result.action !== "signup" || !expectedHostnames.has(result.hostname)) {
         throw new Error("Verification failed")
       }
       // process signup

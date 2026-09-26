@@ -127,14 +127,7 @@ The `email()` handler stores the email and returns immediately. Replies happen l
 import PostalMime from "postal-mime"
 
 export class MailboxDO extends DurableObject {
-  async storeEmail(
-    from: string,
-    to: string,
-    subject: string,
-    body: string,
-    messageId: string,
-    inReplyTo: string | null,
-  ) {
+  async storeEmail(from: string, to: string, subject: string, body: string, messageId: string, inReplyTo: string | null) {
     this.ctx.storage.sql.exec(
       `INSERT INTO emails (sender, recipient, subject, body, message_id, in_reply_to, date, read)
        VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 0)`,
@@ -156,14 +149,7 @@ export default {
     const id = env.MAILBOX.idFromName(message.to)
     const stub = env.MAILBOX.get(id)
 
-    await stub.storeEmail(
-      message.from,
-      message.to,
-      parsed.subject || "(no subject)",
-      parsed.text || parsed.html || "",
-      message.headers.get("message-id") || "",
-      message.headers.get("in-reply-to") || null,
-    )
+    await stub.storeEmail(message.from, message.to, parsed.subject || "(no subject)", parsed.text || parsed.html || "", message.headers.get("message-id") || "", message.headers.get("in-reply-to") || null)
 
     // Optionally trigger an AI agent to draft a reply (non-blocking)
     // ctx.waitUntil(notifyAgent(env, message.to, emailId));

@@ -74,14 +74,11 @@ export default {
 export default {
   async scheduled(event, env) {
     const jwks = await (await fetch("https://auth.example.com/.well-known/jwks.json")).json()
-    await fetch(
-      `https://api.cloudflare.com/client/v4/zones/${env.ZONE_ID}/api_gateway/token_validation/${env.CONFIG_ID}`,
-      {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${env.CF_API_TOKEN}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ jwks: JSON.stringify(jwks) }),
-      },
-    )
+    await fetch(`https://api.cloudflare.com/client/v4/zones/${env.ZONE_ID}/api_gateway/token_validation/${env.CONFIG_ID}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${env.CF_API_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ jwks: JSON.stringify(jwks) }),
+    })
   },
 }
 ```

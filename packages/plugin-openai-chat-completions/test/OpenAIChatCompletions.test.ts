@@ -152,14 +152,8 @@ test("rejects unsupported semantics with their field path", () => {
     [{ ...minimal, n: 2 }, "request.n"],
     [{ ...minimal, stop: ["stop"] }, "request.stop"],
     [{ ...minimal, response_format: { type: "json_object" } }, "response_format.type"],
-    [
-      { ...minimal, messages: [{ role: "user", content: [{ type: "input_audio", data: "..." }] }] },
-      "messages[0].content[0].type",
-    ],
-    [
-      { ...minimal, messages: [{ role: "assistant", content: "", function_call: { name: "f", arguments: "{}" } }] },
-      "messages[0].function_call",
-    ],
+    [{ ...minimal, messages: [{ role: "user", content: [{ type: "input_audio", data: "..." }] }] }, "messages[0].content[0].type"],
+    [{ ...minimal, messages: [{ role: "assistant", content: "", function_call: { name: "f", arguments: "{}" } }] }, "messages[0].function_call"],
     [
       {
         ...minimal,
@@ -169,42 +163,38 @@ test("rejects unsupported semantics with their field path", () => {
     ],
     [{ ...minimal, tools: [{ type: "custom", function: {} }] }, "tools[0].type"],
     [{ ...minimal, max_completion_tokens: 1 }, "request.max_completion_tokens"],
-    [
-      { ...minimal, metadata: Object.fromEntries(Array.from({ length: 17 }, (_, index) => [String(index), "value"])) },
-      "request.metadata",
-    ],
+    [{ ...minimal, metadata: Object.fromEntries(Array.from({ length: 17 }, (_, index) => [String(index), "value"])) }, "request.metadata"],
   ] as const
-  assert.deepEqual(cases.map(([request, path]) => {
-    const error = failure(request)
-    return [error.path.endsWith(path), error.reason]
-  }), cases.map(() => [true, "unsupported"]))
+  assert.deepEqual(
+    cases.map(([request, path]) => {
+      const error = failure(request)
+      return [error.path.endsWith(path), error.reason]
+    }),
+    cases.map(() => [true, "unsupported"]),
+  )
 })
 
 test("rejects malformed requests without dropping nested data", () => {
   const minimal = { model: "chat", messages: [{ role: "user", content: "hi" }] }
   const cases = [
     [{ ...minimal, messages: [{ role: "assistant", content: null, tool_calls: [] }] }, "messages[0]"],
-    [
-      { ...minimal, messages: [{ role: "user", content: [{ type: "image_url", image_url: { detail: "high" } }] }] },
-      "messages[0].content[0].image_url.url",
-    ],
+    [{ ...minimal, messages: [{ role: "user", content: [{ type: "image_url", image_url: { detail: "high" } }] }] }, "messages[0].content[0].image_url.url"],
     [{ ...minimal, max_tokens: 32, max_completion_tokens: 32 }, "request.max_tokens"],
     [{ ...minimal, temperature: Number.NaN }, "request.temperature"],
     [{ ...minimal, metadata: { team: 10 } }, "request.metadata.team"],
     [{ ...minimal, max_completion_tokens: null }, "request.max_completion_tokens"],
   ] as const
-  assert.deepEqual(cases.map(([request, path]) => {
-    const error = failure(request)
-    return [error.path.endsWith(path), error.reason]
-  }), cases.map(() => [true, "invalid"]))
+  assert.deepEqual(
+    cases.map(([request, path]) => {
+      const error = failure(request)
+      return [error.path.endsWith(path), error.reason]
+    }),
+    cases.map(() => [true, "invalid"]),
+  )
 })
 
 test("upstream conversion refuses meaningful fields without a Chat projection", () => {
-  const annotated = toChatRequest({ model: "private", input: [{ type: "message", role: "assistant", content: [
-    { type: "output_text", text: "Hello", annotations: [
-      { type: "url_citation", start_index: 0, end_index: 5, url: "https://example.com", title: "Source" },
-    ] },
-  ] }] })
+  const annotated = toChatRequest({ model: "private", input: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "Hello", annotations: [{ type: "url_citation", start_index: 0, end_index: 5, url: "https://example.com", title: "Source" }] }] }] })
   assert.ok(Result.isFailure(annotated))
   assert.match(annotated.failure.message, /annotations/)
   const phased = toChatRequest({ model: "private", input: [{ type: "message", role: "assistant", phase: "commentary", content: "Working" }] })

@@ -45,12 +45,7 @@ const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify
   }),
 })
 const result = await r.json()
-if (
-  r.ok !== true ||
-  result.success !== true ||
-  result.action !== "subscribe" ||
-  !expectedHostnames.has(result.hostname)
-) {
+if (r.ok !== true || result.success !== true || result.action !== "subscribe" || !expectedHostnames.has(result.hostname)) {
   return res.status(403).end()
 }
 // existing handler logic runs here
@@ -125,11 +120,7 @@ For an AJAX flow, replace the native form and API script with explicit rendering
     }
   })
 </script>
-<script
-  src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onSubscribeTurnstileLoad&render=explicit"
-  async
-  defer
-></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onSubscribeTurnstileLoad&render=explicit" async defer></script>
 ```
 
 ## No backend?

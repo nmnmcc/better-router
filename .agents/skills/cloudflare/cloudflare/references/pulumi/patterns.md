@@ -8,11 +8,7 @@ class WorkerApp extends pulumi.ComponentResource {
     super("custom:cloudflare:WorkerApp", name, {}, opts)
     const defaultOpts = { parent: this }
 
-    this.kv = new cloudflare.WorkersKvNamespace(
-      `${name}-kv`,
-      { accountId: args.accountId, title: `${name}-kv` },
-      defaultOpts,
-    )
+    this.kv = new cloudflare.WorkersKvNamespace(`${name}-kv`, { accountId: args.accountId, title: `${name}-kv` }, defaultOpts)
     this.worker = new cloudflare.WorkerScript(
       `${name}-worker`,
       {

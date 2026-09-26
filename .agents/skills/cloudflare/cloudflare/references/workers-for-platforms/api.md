@@ -171,11 +171,7 @@ Control external fetch from user Workers:
 ### Configure
 
 ```typescript
-const userWorker = env.DISPATCHER.get(
-  workerName,
-  {},
-  { outbound: { customer_context: { customer_name: workerName, url: request.url } } },
-)
+const userWorker = env.DISPATCHER.get(workerName, {}, { outbound: { customer_context: { customer_name: workerName, url: request.url } } })
 ```
 
 ### Implement

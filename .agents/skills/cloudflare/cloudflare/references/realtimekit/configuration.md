@@ -44,10 +44,7 @@ export class AppComponent {
 ### Web Components
 
 ```html
-<script
-  type="module"
-  src="https://cdn.jsdelivr.net/npm/@cloudflare/realtimekit-ui/dist/realtimekit-ui/realtimekit-ui.esm.js"
-></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/@cloudflare/realtimekit-ui/dist/realtimekit-ui/realtimekit-ui.esm.js"></script>
 <rtk-meeting id="meeting"></rtk-meeting>
 <script>
   document.getElementById("meeting").authToken = "<token>"

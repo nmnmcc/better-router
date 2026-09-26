@@ -57,12 +57,7 @@ export async function onRequestPost({ request, env }) {
     }),
   })
   const result = await r.json()
-  if (
-    r.ok !== true ||
-    result.success !== true ||
-    result.action !== "subscribe" ||
-    !expectedHostnames.has(result.hostname)
-  ) {
+  if (r.ok !== true || result.success !== true || result.action !== "subscribe" || !expectedHostnames.has(result.hostname)) {
     return new Response("forbidden", { status: 403 })
   }
 

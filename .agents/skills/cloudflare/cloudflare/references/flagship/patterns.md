@@ -42,11 +42,7 @@ interface RateLimitConfig {
   burst: number
 }
 
-const limits = await env.FLAGS.getObjectValue<RateLimitConfig>(
-  "rate-limits",
-  { rpm: 100, burst: 20 },
-  { plan: userPlan },
-)
+const limits = await env.FLAGS.getObjectValue<RateLimitConfig>("rate-limits", { rpm: 100, burst: 20 }, { plan: userPlan })
 ```
 
 ### Using Details for Observability

@@ -80,10 +80,7 @@ export default {
     const apiUrl = "https://api.partner.com"
     const headers = { Authorization: `Bearer ${env.API_KEY}` }
 
-    const [profile, transactions] = await Promise.all([
-      fetch(`${apiUrl}/profile`, { headers }),
-      fetch(`${apiUrl}/transactions`, { headers }),
-    ])
+    const [profile, transactions] = await Promise.all([fetch(`${apiUrl}/profile`, { headers }), fetch(`${apiUrl}/transactions`, { headers })])
 
     return Response.json({
       profile: await profile.json(),
@@ -138,10 +135,7 @@ export default {
     const analyticsDO = env.ANALYTICS_DO.get(analyticsID)
 
     // Fetch from multiple DOs
-    const [userData, analyticsData] = await Promise.all([
-      userDO.fetch(new Request("https://do/profile")),
-      analyticsDO.fetch(new Request("https://do/stats")),
-    ])
+    const [userData, analyticsData] = await Promise.all([userDO.fetch(new Request("https://do/profile")), analyticsDO.fetch(new Request("https://do/stats"))])
 
     return Response.json({
       user: await userData.json(),

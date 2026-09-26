@@ -2,9 +2,9 @@
 
 Each `source-to-target` directory is an independent Yarn workspace with a `start` entrypoint and an HTTP integration test. `source` selects the only exposed endpoint; `target` selects the only deployment. All nine combinations route through OpenResponses IR, including same-protocol combinations. `shared` contains configuration and a local fake-upstream fixture, not another gateway.
 
-| Ingress | Chat upstream | Responses upstream | Anthropic upstream |
-| --- | --- | --- | --- |
-| Chat | `chat-to-chat` | `chat-to-responses` | `chat-to-anthropic` |
+| Ingress   | Chat upstream       | Responses upstream       | Anthropic upstream       |
+| --------- | ------------------- | ------------------------ | ------------------------ |
+| Chat      | `chat-to-chat`      | `chat-to-responses`      | `chat-to-anthropic`      |
 | Responses | `responses-to-chat` | `responses-to-responses` | `responses-to-anthropic` |
 | Anthropic | `anthropic-to-chat` | `anthropic-to-responses` | `anthropic-to-anthropic` |
 

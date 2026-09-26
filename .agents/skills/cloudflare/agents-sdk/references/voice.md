@@ -21,11 +21,7 @@ export class VoiceAgent extends withVoice(Agent)<Env> {
   async onTurn(transcript: string, context: VoiceTurnContext) {
     const result = streamText({
       model: createWorkersAI({ binding: this.env.AI })("@cf/meta/llama-4-scout-17b-16e-instruct"),
-      messages: [
-        { role: "system", content: "You are a voice assistant." },
-        ...context.conversationHistory,
-        { role: "user", content: transcript },
-      ],
+      messages: [{ role: "system", content: "You are a voice assistant." }, ...context.conversationHistory, { role: "user", content: transcript }],
     })
 
     for await (const chunk of result.textStream) {

@@ -28,9 +28,7 @@ describe("OpenResponses IR", () => {
         { type: "function_call_output", call_id: "call_1", output: "Done" },
         { type: "acme:receipt", id: "receipt_1", status: "completed", data: { ok: true } },
       ],
-      tools: [
-        { type: "function", name: "lookup", parameters: { type: "object", properties: { city: { type: "string" } } } },
-      ],
+      tools: [{ type: "function", name: "lookup", parameters: { type: "object", properties: { city: { type: "string" } } } }],
       previous_response_id: "resp_1",
       text: { format: { type: "json_schema", name: "result", schema: { type: "object" } } },
     } as const satisfies ModelRequest
@@ -93,7 +91,6 @@ describe("deployment contracts", () => {
     expect<{}>().type.not.toBeAssignableTo<Deployment.UpstreamExecutors>()
     expect<() => Stream.Stream<ModelEvent>>().type.not.toBeAssignableTo<Deployment.ModelExecutor>()
   })
-
 })
 
 describe("router inference", () => {
@@ -103,13 +100,7 @@ describe("router inference", () => {
     }
     const audit: Plugin.RouterPlugin<"audit", AuditLog> = { id: "audit" }
     const router = Router.make({ plugins: [audit], routes: [] })
-    expect(router).type.toBe<
-      Effect.Effect<
-        Router.Router<Router.ComposedHttpApi<readonly [typeof audit]>>,
-        Plugin.SetupError,
-        Scope.Scope | AuditLog
-      >
-    >()
+    expect(router).type.toBe<Effect.Effect<Router.Router<Router.ComposedHttpApi<readonly [typeof audit]>>, Plugin.SetupError, Scope.Scope | AuditLog>>()
     expect<Plugin.PluginRequirements<typeof audit>>().type.toBe<AuditLog>()
   })
 })

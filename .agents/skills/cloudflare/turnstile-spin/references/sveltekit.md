@@ -89,12 +89,7 @@ export const actions: Actions = {
       }),
     })
     const result = await verify.json()
-    if (
-      verify.ok !== true ||
-      result.success !== true ||
-      result.action !== "signup" ||
-      !expectedHostnames.has(result.hostname)
-    ) {
+    if (verify.ok !== true || result.success !== true || result.action !== "signup" || !expectedHostnames.has(result.hostname)) {
       return fail(403, { error: "Verification failed" })
     }
 
@@ -144,12 +139,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
     }),
   })
   const result = await verify.json()
-  if (
-    verify.ok !== true ||
-    result.success !== true ||
-    result.action !== "signup" ||
-    !expectedHostnames.has(result.hostname)
-  ) {
+  if (verify.ok !== true || result.success !== true || result.action !== "signup" || !expectedHostnames.has(result.hostname)) {
     return new Response("forbidden", { status: 403 })
   }
   // process signup

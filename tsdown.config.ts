@@ -2,12 +2,7 @@ import { defineConfig } from "tsdown"
 
 const packages = {
   core: ["Conversion", "Deployment", "Http", "HttpJson", "Model", "ModelEvents", "ModelSchema", "OpenResponses", "Plugin", "Router", "Routing", "Transform"],
-  "plugin-openai-chat-completions": [
-    "OpenAIChatCompletions",
-    "OpenAIChatCompletionsHttp",
-    "OpenAIChatCompletionsUpstream",
-    "OpenAIChatCompletionsPlugin",
-  ],
+  "plugin-openai-chat-completions": ["OpenAIChatCompletions", "OpenAIChatCompletionsHttp", "OpenAIChatCompletionsUpstream", "OpenAIChatCompletionsPlugin"],
   "plugin-openai-responses": ["OpenAIResponses", "OpenAIResponsesHttp", "OpenAIResponsesPlugin"],
   "plugin-anthropic-messages": ["AnthropicMessages", "AnthropicMessagesHttp", "AnthropicMessagesPlugin"],
 }

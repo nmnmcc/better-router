@@ -4,10 +4,7 @@
 
 ```typescript
 async function enableOptimalPerformance(client: Cloudflare, zoneId: string) {
-  await Promise.all([
-    client.argo.smartRouting.edit({ zone_id: zoneId, value: "on" }),
-    client.argo.tieredCaching.edit({ zone_id: zoneId, value: "on" }),
-  ])
+  await Promise.all([client.argo.smartRouting.edit({ zone_id: zoneId, value: "on" }), client.argo.tieredCaching.edit({ zone_id: zoneId, value: "on" })])
 }
 ```
 
@@ -89,16 +86,10 @@ async function setupArgo(client: Cloudflare, zoneId: string) {
   if (!canEnable) throw new Error(issues.join(", "))
 
   // 2. Enable both features
-  await Promise.all([
-    client.argo.smartRouting.edit({ zone_id: zoneId, value: "on" }),
-    client.argo.tieredCaching.edit({ zone_id: zoneId, value: "on" }),
-  ])
+  await Promise.all([client.argo.smartRouting.edit({ zone_id: zoneId, value: "on" }), client.argo.tieredCaching.edit({ zone_id: zoneId, value: "on" })])
 
   // 3. Verify
-  const [argo, cache] = await Promise.all([
-    client.argo.smartRouting.get({ zone_id: zoneId }),
-    client.argo.tieredCaching.get({ zone_id: zoneId }),
-  ])
+  const [argo, cache] = await Promise.all([client.argo.smartRouting.get({ zone_id: zoneId }), client.argo.tieredCaching.get({ zone_id: zoneId })])
 
   return { argo: argo.value === "on", tieredCache: cache.value === "on" }
 }

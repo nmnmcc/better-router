@@ -21,15 +21,7 @@ export interface DeploymentRef {
 }
 
 export const ProviderError = Schema.Struct({
-  kind: Schema.Literals([
-    "invalid_request",
-    "unauthorized",
-    "rate_limited",
-    "timeout",
-    "unavailable",
-    "unsupported",
-    "unknown",
-  ]),
+  kind: Schema.Literals(["invalid_request", "unauthorized", "rate_limited", "timeout", "unavailable", "unsupported", "unknown"]),
   message: Schema.String,
   retryable: Schema.Boolean,
   cause: Schema.optional(Schema.Defect({ excludeCause: true })),
@@ -37,14 +29,10 @@ export const ProviderError = Schema.Struct({
 
 export type ProviderError = typeof ProviderError.Type
 
-export type ModelExecutor<Requirements = never> = (
-  request: ModelRequest,
-) => Effect.Effect<Stream.Stream<ModelEvent, ProviderError, Requirements>, ProviderError, Requirements>
+export type ModelExecutor<Requirements = never> = (request: ModelRequest) => Effect.Effect<Stream.Stream<ModelEvent, ProviderError, Requirements>, ProviderError, Requirements>
 
 /** At least one executable upstream transport must be present. */
-export type UpstreamExecutors<Requirements = never> =
-  | { readonly http: ModelExecutor<Requirements>; readonly websocket?: ModelExecutor<Requirements> }
-  | { readonly http?: ModelExecutor<Requirements>; readonly websocket: ModelExecutor<Requirements> }
+export type UpstreamExecutors<Requirements = never> = { readonly http: ModelExecutor<Requirements>; readonly websocket?: ModelExecutor<Requirements> } | { readonly http?: ModelExecutor<Requirements>; readonly websocket: ModelExecutor<Requirements> }
 
 /** A deployment binds its private provider configuration to executable paths. */
 export interface ModelDeployment<Requirements = never> extends DeploymentRef {

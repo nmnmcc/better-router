@@ -23,7 +23,7 @@ it("declares Responses ingress and deployments separately or together", () => {
   const configured = deployment({ id: "responses", model: "private", apiKey: key })
   expect(plugin({ gatewayKey: key }).http).type.not.toBe<undefined>()
   if (Result.isSuccess(configured)) {
-    expect(plugin({ deployments: [configured.success] }).deployments).type.toBeAssignableTo<readonly typeof configured.success[] | undefined>()
+    expect(plugin({ deployments: [configured.success] }).deployments).type.toBeAssignableTo<readonly (typeof configured.success)[] | undefined>()
     expect(plugin({ gatewayKey: key, deployments: [configured.success] }).http).type.not.toBe<undefined>()
   }
   // @ts-expect-error No overload matches this call

@@ -18,9 +18,7 @@ const responses = HttpApiGroup.make("responses").add(
 )
 
 const openaiApi = HttpApi.make("openai").add(responses)
-const responsesHandlers = HttpApiBuilder.group(openaiApi, "responses", (handlers) =>
-  handlers.handle("create", ({ payload }) => Effect.succeed({ id: payload.model })),
-)
+const responsesHandlers = HttpApiBuilder.group(openaiApi, "responses", (handlers) => handlers.handle("create", ({ payload }) => Effect.succeed({ id: payload.model })))
 const openaiRoutes = HttpApiBuilder.layer(openaiApi).pipe(Layer.provide(responsesHandlers))
 
 const openai = {
@@ -125,8 +123,7 @@ void wrongExecutor
 
 const chat = OpenAIChatCompletionsPlugin.make({ gatewayKey: Redacted.make("client") })
 const configuredResponses = OpenAIResponses.make({ id: "openai-http", model: "gpt-5", apiKey: Redacted.make("upstream") })
-const responsesPlugin = OpenAIResponsesPlugin.make(Result.isSuccess(configuredResponses)
-  ? { deployments: [configuredResponses.success] } : {})
+const responsesPlugin = OpenAIResponsesPlugin.make(Result.isSuccess(configuredResponses) ? { deployments: [configuredResponses.success] } : {})
 const gatewayPlugins = [chat, responsesPlugin] as const
 const gatewayRouter = Router.make({ plugins: gatewayPlugins, routes: [{ model: "chat", deployments: ["openai-http"] }] })
 void gatewayRouter

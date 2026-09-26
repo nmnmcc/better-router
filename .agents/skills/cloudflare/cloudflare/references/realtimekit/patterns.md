@@ -121,14 +121,11 @@ meeting.participants.waitlisted.on("participantJoined", (participant) => {
 })
 
 // Approve from waitlist (backend only)
-await fetch(
-  `https://api.cloudflare.com/client/v4/accounts/${accountId}/realtime/kit/${appId}/meetings/${meetingId}/active-session/waitlist/approve`,
-  {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiToken}` },
-    body: JSON.stringify({ user_ids: [participant.userId] }),
-  },
-)
+await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/realtime/kit/${appId}/meetings/${meetingId}/active-session/waitlist/approve`, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${apiToken}` },
+  body: JSON.stringify({ user_ids: [participant.userId] }),
+})
 
 // Client receives automatic transition when approved
 meeting.self.on("roomJoined", () => console.log("Approved and joined"))
@@ -192,14 +189,11 @@ export default {
 
     if (url.pathname === "/api/join-meeting") {
       const { meetingId, userName, presetName } = await request.json()
-      const response = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/realtime/kit/${env.REALTIMEKIT_APP_ID}/meetings/${meetingId}/participants`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}` },
-          body: JSON.stringify({ name: userName, preset_name: presetName }),
-        },
-      )
+      const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/realtime/kit/${env.REALTIMEKIT_APP_ID}/meetings/${meetingId}/participants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}` },
+        body: JSON.stringify({ name: userName, preset_name: presetName }),
+      })
       const data = await response.json()
       return Response.json({ authToken: data.result.authToken })
     }

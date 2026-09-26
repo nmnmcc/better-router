@@ -28,12 +28,7 @@ async function getTURNConfig(): Promise<RTCIceServer[]> {
       urls: "stun:stun.cloudflare.com:3478",
     },
     {
-      urls: [
-        "turn:turn.cloudflare.com:3478?transport=udp",
-        "turn:turn.cloudflare.com:3478?transport=tcp",
-        "turns:turn.cloudflare.com:5349?transport=tcp",
-        "turns:turn.cloudflare.com:443?transport=tcp",
-      ],
+      urls: ["turn:turn.cloudflare.com:3478?transport=udp", "turn:turn.cloudflare.com:3478?transport=tcp", "turns:turn.cloudflare.com:5349?transport=tcp", "turns:turn.cloudflare.com:443?transport=tcp"],
       username: data.username,
       credential: data.credential,
       credentialType: "password",
@@ -150,10 +145,7 @@ class TURNCredentialsManager {
   }
 
   private buildIceServers(c: { username: string; credential: string; urls: string[] }): RTCIceServer[] {
-    return [
-      { urls: "stun:stun.cloudflare.com:3478" },
-      { urls: c.urls, username: c.username, credential: c.credential, credentialType: "password" as const },
-    ]
+    return [{ urls: "stun:stun.cloudflare.com:3478" }, { urls: c.urls, username: c.username, credential: c.credential, credentialType: "password" as const }]
   }
 }
 ```

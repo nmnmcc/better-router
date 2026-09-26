@@ -72,7 +72,12 @@ test("public error schemas retain tagged shapes, reject invalid fields and suppo
   const decodedFailure = Schema.decodeUnknownSync(SetupError)(encodedFailure)
   if (decodedFailure._tag !== "PluginStartFailed") assert.fail("Expected PluginStartFailed")
   assert.equal(decodedFailure.cause instanceof Error, true)
-  const circular = { message: "bad input", get self(): unknown { return this } }
+  const circular = {
+    message: "bad input",
+    get self(): unknown {
+      return this
+    },
+  }
   assert.doesNotThrow(() => JSON.stringify(Schema.encodeSync(RouterError)(RouterError.cases.TransformFailed.make({ id: "test", cause: circular }))))
 })
 
@@ -115,14 +120,14 @@ test.effect("ranks candidates, changes the private model, and composes transform
     const executor =
       (name: string): ModelExecutor =>
       (request) =>
-        Ref.update(trace, (entries) => [...entries, name + ":" + request.model]).pipe(
-          Effect.as(Stream.succeed(finished(request.model))))
+        Ref.update(trace, (entries) => [...entries, name + ":" + request.model]).pipe(Effect.as(Stream.succeed(finished(request.model))))
     const wrap = (name: string): ModelTransform => ({
       id: name,
-      wrap: (next) => (request, invocation) => Ref.update(trace, (entries) => [...entries, name + ":before"]).pipe(
-        Effect.flatMap(() => next(request, invocation)),
-        Effect.tap(() => Ref.update(trace, (entries) => [...entries, name + ":after"])),
-      ),
+      wrap: (next) => (request, invocation) =>
+        Ref.update(trace, (entries) => [...entries, name + ":before"]).pipe(
+          Effect.flatMap(() => next(request, invocation)),
+          Effect.tap(() => Ref.update(trace, (entries) => [...entries, name + ":after"])),
+        ),
     })
     const plugin = configured([deployment("first", executor("first")), deployment("second", executor("second"))], {
       policies: [{ id: "reverse", rank: (_request, candidates) => Effect.succeed([...candidates].reverse()) }],
@@ -170,25 +175,23 @@ test.effect("rejects invalid policy output and unsupported required transport", 
 
 test.effect("falls back only before the first event and only for retryable failures", () =>
   Effect.gen(function* () {
-    yield* Effect.forEach([() => Effect.fail(providerError), () => Effect.succeed(Stream.fail(providerError))], (first) => Effect.gen(function* () {
-      const calls = yield* Ref.make(0)
-      const secondary = deployment("next", () =>
-        Ref.update(calls, (count) => count + 1).pipe(Effect.as(Stream.succeed(finished()))),
-      )
-      const response = yield* Effect.scoped(
-        Effect.gen(function* () {
-          const router = yield* make(options([configured([deployment("primary", first), secondary])], ["primary", "next"]))
-          return yield* router.complete({ model: "chat" })
-        }),
-      )
-      assert.equal(response.id, "resp_1")
-      assert.equal(yield* Ref.get(calls), 1)
-    }))
+    yield* Effect.forEach([() => Effect.fail(providerError), () => Effect.succeed(Stream.fail(providerError))], (first) =>
+      Effect.gen(function* () {
+        const calls = yield* Ref.make(0)
+        const secondary = deployment("next", () => Ref.update(calls, (count) => count + 1).pipe(Effect.as(Stream.succeed(finished()))))
+        const response = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const router = yield* make(options([configured([deployment("primary", first), secondary])], ["primary", "next"]))
+            return yield* router.complete({ model: "chat" })
+          }),
+        )
+        assert.equal(response.id, "resp_1")
+        assert.equal(yield* Ref.get(calls), 1)
+      }),
+    )
     const calls = yield* Ref.make(0)
     const first = deployment("primary", () => Effect.succeed(Stream.succeed(created).pipe(Stream.concat(Stream.fail(providerError)))))
-    const second = deployment("next", () =>
-      Ref.update(calls, (count) => count + 1).pipe(Effect.as(Stream.succeed(finished()))),
-    )
+    const second = deployment("next", () => Ref.update(calls, (count) => count + 1).pipe(Effect.as(Stream.succeed(finished()))))
     const caught = yield* Effect.scoped(
       Effect.gen(function* () {
         const router = yield* make(options([configured([first, second])], ["primary", "next"]))
@@ -210,20 +213,21 @@ test.effect("falls back only before the first event and only for retryable failu
 
 test.effect("requires one terminal snapshot and releases plugin resources on completion or failed startup", () =>
   Effect.gen(function* () {
-    yield* Effect.forEach([Stream.empty, Stream.make(finished(), created)], (events) => Effect.gen(function* () {
-      const error = yield* Effect.scoped(
-        Effect.gen(function* () {
-          const router = yield* make(options([configured([deployment("one", () => Effect.succeed(events))])], ["one"]))
-          return yield* Effect.flip(router.complete({ model: "chat" }))
-        }),
-      )
-      assert.equal(error._tag, "InvalidResponse")
-    }))
+    yield* Effect.forEach([Stream.empty, Stream.make(finished(), created)], (events) =>
+      Effect.gen(function* () {
+        const error = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const router = yield* make(options([configured([deployment("one", () => Effect.succeed(events))])], ["one"]))
+            return yield* Effect.flip(router.complete({ model: "chat" }))
+          }),
+        )
+        assert.equal(error._tag, "InvalidResponse")
+      }),
+    )
     const released = yield* Ref.make(0)
     const audit = {
       id: "audit",
-      start: () =>
-        Effect.addFinalizer(() => Ref.update(released, (count) => count + 1)),
+      start: () => Effect.addFinalizer(() => Ref.update(released, (count) => count + 1)),
     }
     yield* Effect.scoped(make({ plugins: [audit], routes: [] }))
     assert.equal(yield* Ref.get(released), 1)
@@ -251,8 +255,7 @@ test.effect("interrupting a suspended stream closes its finalizer and the router
     )
     const audit: RouterPlugin = {
       id: "audit",
-      start: () =>
-        Effect.addFinalizer(() => Ref.update(pluginReleased, (count) => count + 1)),
+      start: () => Effect.addFinalizer(() => Ref.update(pluginReleased, (count) => count + 1)),
     }
     yield* Effect.scoped(
       Effect.gen(function* () {

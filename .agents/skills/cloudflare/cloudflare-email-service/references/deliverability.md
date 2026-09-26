@@ -197,11 +197,7 @@ query EmailSendingByStatus($zoneTag: string!, $start: Date!, $end: Date!) {
 query EmailFailures($zoneTag: string!, $start: Date!, $end: Date!) {
   viewer {
     zones(filter: { zoneTag: $zoneTag }) {
-      emailSendingAdaptiveGroups(
-        filter: { date_geq: $start, date_leq: $end, status: "deliveryFailed" }
-        limit: 10000
-        orderBy: [date_DESC]
-      ) {
+      emailSendingAdaptiveGroups(filter: { date_geq: $start, date_leq: $end, status: "deliveryFailed" }, limit: 10000, orderBy: [date_DESC]) {
         count
         dimensions {
           date

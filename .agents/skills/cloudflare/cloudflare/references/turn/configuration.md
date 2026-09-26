@@ -86,17 +86,14 @@ export default {
         return new Response("Unauthorized", { status: 401 })
       }
 
-      const response = await fetch(
-        `https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${env.TURN_KEY_SECRET}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ ttl: 3600 }),
+      const response = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.TURN_KEY_SECRET}`,
+          "Content-Type": "application/json",
         },
-      )
+        body: JSON.stringify({ ttl: 3600 }),
+      })
 
       if (!response.ok) {
         return new Response("Failed to generate credentials", { status: 500 })

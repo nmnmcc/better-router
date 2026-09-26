@@ -90,9 +90,7 @@ const program = LanguageModel.generateObject({
   schema: Answer,
 }).pipe(
   Effect.map((response) => response.value),
-  Effect.catchTag("AiError", (error: AiError.AiError) =>
-    Effect.fail(new Error(`AI request failed: ${error.reason._tag}`)),
-  ),
+  Effect.catchTag("AiError", (error: AiError.AiError) => Effect.fail(new Error(`AI request failed: ${error.reason._tag}`))),
   Effect.provide(ModelLayer),
 )
 ```

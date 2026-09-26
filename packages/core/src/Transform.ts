@@ -3,10 +3,7 @@ import type { InvocationOptions } from "./Deployment.js"
 import type { ModelEvent, ModelRequest } from "./Model.js"
 import type { RouterError } from "./Router.js"
 
-export type ModelHandler<Requirements = never> = (
-  request: ModelRequest,
-  options?: InvocationOptions,
-) => Effect.Effect<Stream.Stream<ModelEvent, RouterError, Requirements>, RouterError, Requirements>
+export type ModelHandler<Requirements = never> = (request: ModelRequest, options?: InvocationOptions) => Effect.Effect<Stream.Stream<ModelEvent, RouterError, Requirements>, RouterError, Requirements>
 
 export interface ModelTransform<Requirements = never> {
   readonly id: string

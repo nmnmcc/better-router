@@ -4,8 +4,5 @@
     "types": ["node"]
   },
   "include": ["src"],
-  "references": [
-    { "path": "../../packages/plugin-openai-chat-completions" },
-    { "path": "../../packages/plugin-openai-responses" }
-  ]
+  "references": [{ "path": "../../packages/plugin-openai-chat-completions" }, { "path": "../../packages/plugin-openai-responses" }]
 }

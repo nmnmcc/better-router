@@ -77,14 +77,11 @@ import * as pulumi from "@pulumi/pulumi"
 
 class D1MigrationProvider implements pulumi.dynamic.ResourceProvider {
   async create(inputs: any): Promise<pulumi.dynamic.CreateResult> {
-    const response = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${inputs.accountId}/d1/database/${inputs.databaseId}/query`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${inputs.apiToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ sql: inputs.sql }),
-      },
-    )
+    const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${inputs.accountId}/d1/database/${inputs.databaseId}/query`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${inputs.apiToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ sql: inputs.sql }),
+    })
     return { id: `${inputs.databaseId}-${Date.now()}`, outs: await response.json() }
   }
   async update(id: string, olds: any, news: any): Promise<pulumi.dynamic.UpdateResult> {

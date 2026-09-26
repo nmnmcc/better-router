@@ -50,12 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }),
   })
   const result = await verify.json()
-  if (
-    verify.ok !== true ||
-    result.success !== true ||
-    result.action !== "signup" ||
-    !expectedHostnames.has(result.hostname)
-  ) {
+  if (verify.ok !== true || result.success !== true || result.action !== "signup" || !expectedHostnames.has(result.hostname)) {
     return res.status(403).json({ error: "Verification failed" })
   }
   // process signup

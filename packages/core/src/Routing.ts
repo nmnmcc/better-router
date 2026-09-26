@@ -20,8 +20,5 @@ export type RoutingError = typeof RoutingError.Type
 export interface RoutingPolicy {
   readonly id: string
   /** Return an ordered subset of candidates; do not introduce new deployments. */
-  readonly rank: (
-    request: ModelRequest,
-    candidates: readonly DeploymentRef[],
-  ) => Effect.Effect<readonly DeploymentRef[], RoutingError>
+  readonly rank: (request: ModelRequest, candidates: readonly DeploymentRef[]) => Effect.Effect<readonly DeploymentRef[], RoutingError>
 }

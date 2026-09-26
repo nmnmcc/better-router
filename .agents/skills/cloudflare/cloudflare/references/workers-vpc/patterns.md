@@ -211,10 +211,7 @@ export default {
     const proto = url.pathname.slice(1) // /redis
     const host = url.searchParams.get("host")
     if (!host || !PROTOCOLS[proto]) return new Response("Invalid", { status: 400 })
-    const result = await PROTOCOLS[proto].test(
-      host,
-      parseInt(url.searchParams.get("port") || "") || PROTOCOLS[proto].defaultPort,
-    )
+    const result = await PROTOCOLS[proto].test(host, parseInt(url.searchParams.get("port") || "") || PROTOCOLS[proto].defaultPort)
     return new Response(result)
   },
 }

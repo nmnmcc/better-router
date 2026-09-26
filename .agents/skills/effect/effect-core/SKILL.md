@@ -47,8 +47,7 @@ import { Effect, Schedule } from "effect"
 
 type NotFound = { readonly _tag: "NotFound"; readonly id: string }
 
-const loadUser = (id: string) =>
-  id === "missing" ? Effect.fail<NotFound>({ _tag: "NotFound", id }) : Effect.succeed({ id, name: "Ada" })
+const loadUser = (id: string) => (id === "missing" ? Effect.fail<NotFound>({ _tag: "NotFound", id }) : Effect.succeed({ id, name: "Ada" }))
 
 const program = loadUser("u1").pipe(
   Effect.retry(Schedule.recurs(2)),

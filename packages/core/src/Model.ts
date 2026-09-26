@@ -6,10 +6,7 @@ type Schemas = components["schemas"]
 type CreateResponse = Schemas["CreateResponseBody"]
 type StandardEvent = operations["createResponse"]["responses"][200]["content"]["text/event-stream"]
 
-export type DeepReadonly<T> = T extends (...args: never[]) => unknown ? T
-  : T extends readonly (infer Item)[] ? readonly DeepReadonly<Item>[]
-  : T extends object ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
-  : T
+export type DeepReadonly<T> = T extends (...args: never[]) => unknown ? T : T extends readonly (infer Item)[] ? readonly DeepReadonly<Item>[] : T extends object ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> } : T
 
 /** Extension identifiers must use an implementor prefix, e.g. "acme:search_result". */
 export type ExtensionType = `${string}:${string}`
@@ -51,11 +48,7 @@ export type ModelResponse = DeepReadonly<Omit<Schemas["ResponseResource"], "outp
   readonly tools: readonly (DeepReadonly<Schemas["Tool"]> | ExtensionTool)[]
 }
 
-type WithExtensions<Event> = Event extends { readonly response: unknown }
-  ? Omit<Event, "response"> & { readonly response: ModelResponse }
-  : Event extends { readonly item: unknown }
-    ? Omit<Event, "item"> & { readonly item: Event["item"] | ExtensionItem }
-    : Event
+type WithExtensions<Event> = Event extends { readonly response: unknown } ? Omit<Event, "response"> & { readonly response: ModelResponse } : Event extends { readonly item: unknown } ? Omit<Event, "item"> & { readonly item: Event["item"] | ExtensionItem } : Event
 
 /** OpenResponses semantic events, with namespaced extensions kept opaque. */
 export type ModelEvent = DeepReadonly<WithExtensions<StandardEvent>> | ExtensionEvent

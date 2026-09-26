@@ -10,18 +10,16 @@ import { snapshot } from "@better-router/core/ModelEvents"
 import type { OutputItem } from "@better-router/core/Model"
 import { OpenAIChatCompletionsHttpError } from "@better-router/plugin-openai-chat-completions/OpenAIChatCompletionsHttp"
 
-const textItem = { type: "message", id: "msg_1", status: "completed", role: "assistant",
-  content: [{ type: "output_text", text: "Hello", annotations: [] }] } as const
+const textItem = { type: "message", id: "msg_1", status: "completed", role: "assistant", content: [{ type: "output_text", text: "Hello", annotations: [] }] } as const
 const toolItem = { type: "function_call", id: "fc_1", status: "completed", call_id: "call_1", name: "lookup", arguments: "{}" } as const
-const usage = { input_tokens: 3, output_tokens: 2, total_tokens: 5,
-  input_tokens_details: { cached_tokens: 1 }, output_tokens_details: { reasoning_tokens: 0 } }
+const usage = { input_tokens: 3, output_tokens: 2, total_tokens: 5, input_tokens_details: { cached_tokens: 1 }, output_tokens_details: { reasoning_tokens: 0 } }
 const response = (output: readonly OutputItem[] = [textItem], extras: Record<string, unknown> = {}) => ({
-  ...snapshot({ model: "gpt-test" }, "resp_1", 1234, "gpt-test", output, "completed", usage, 1235), ...extras,
+  ...snapshot({ model: "gpt-test" }, "resp_1", 1234, "gpt-test", output, "completed", usage, 1235),
+  ...extras,
 })
 
 const standardEvents = (final = response()) => [
-  { type: "response.created", sequence_number: 0,
-    response: snapshot({ model: "gpt-test" }, "resp_1", 1234, "gpt-test", [], "in_progress", null, null) },
+  { type: "response.created", sequence_number: 0, response: snapshot({ model: "gpt-test" }, "resp_1", 1234, "gpt-test", [], "in_progress", null, null) },
   { type: "response.output_item.added", sequence_number: 1, output_index: 0, item: textItem },
   { type: "response.output_text.delta", sequence_number: 2, item_id: "msg_1", output_index: 0, content_index: 0, delta: "Hello" },
   { type: "response.completed", sequence_number: 3, response: final },
@@ -29,12 +27,14 @@ const standardEvents = (final = response()) => [
 
 function sendEvents(res: ServerResponse, events: readonly { type: string; [key: string]: unknown }[], done = true) {
   res.writeHead(200, { "content-type": "text/event-stream" })
-  const text =
-    events.map((event) => "event: " + event.type + "\r\ndata: " + JSON.stringify(event) + "\r\n\r\n").join("") +
-    (done ? "data: [DONE]\r\n\r\n" : "")
+  const text = events.map((event) => "event: " + event.type + "\r\ndata: " + JSON.stringify(event) + "\r\n\r\n").join("") + (done ? "data: [DONE]\r\n\r\n" : "")
   const bytes = Buffer.from(text)
-  Effect.runSync(Effect.forEach(Array.from({ length: Math.ceil(bytes.length / 7) }, (_, index) => index * 7),
-    (index) => Effect.sync(() => res.write(bytes.subarray(index, index + 7)))))
+  Effect.runSync(
+    Effect.forEach(
+      Array.from({ length: Math.ceil(bytes.length / 7) }, (_, index) => index * 7),
+      (index) => Effect.sync(() => res.write(bytes.subarray(index, index + 7))),
+    ),
+  )
   res.end()
 }
 
@@ -52,11 +52,7 @@ async function fixture(t: TestContext) {
     } else if (currentMode === "interrupted") {
       sendEvents(res, standardEvents().slice(0, 3), false)
     } else if (currentMode === "trailing") {
-      sendEvents(
-        res,
-        [...standardEvents(), { type: "response.output_text.delta", sequence_number: 4, item_id: "msg_1", output_index: 0, content_index: 0, delta: "late" }],
-        false,
-      )
+      sendEvents(res, [...standardEvents(), { type: "response.output_text.delta", sequence_number: 4, item_id: "msg_1", output_index: 0, content_index: 0, delta: "late" }], false)
     } else if (currentMode === "bad-snapshot") {
       sendEvents(res, standardEvents(response([], { status: "failed" })))
     } else if (currentMode === "hold") {
@@ -123,9 +119,7 @@ async function fixture(t: TestContext) {
       child.stderr.on("data", onData)
       child.once("exit", (code) => reject(new Error("Gateway exited (" + code + "): " + Effect.runSync(Ref.get(logs)))))
     }),
-    new Promise<number>((_, reject) =>
-      setTimeout(() => reject(new Error("Gateway startup timed out: " + Effect.runSync(Ref.get(logs)))), 10000).unref(),
-    ),
+    new Promise<number>((_, reject) => setTimeout(() => reject(new Error("Gateway startup timed out: " + Effect.runSync(Ref.get(logs)))), 10000).unref()),
   ])
   return {
     port,
@@ -241,8 +235,5 @@ test("Effect Node host routes Chat Completions through OpenResponses", async (t)
   const reader = holding.body!.getReader()
   assert.match(new TextDecoder().decode((await reader.read()).value), /chat\.completion\.chunk/)
   await reader.cancel()
-  await Promise.race([
-    gateway.closed,
-    new Promise((_, reject) => setTimeout(() => reject(new Error("Upstream was not canceled")), 3000).unref()),
-  ])
+  await Promise.race([gateway.closed, new Promise((_, reject) => setTimeout(() => reject(new Error("Upstream was not canceled")), 3000).unref())])
 })

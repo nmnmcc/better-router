@@ -21,10 +21,7 @@ invalid bytes.
 import { Effect } from "effect"
 import * as Base64Url from "effect/encoding/Base64Url"
 
-const decodeToken = (token: string) =>
-  Effect.fromResult(Base64Url.decode(token)).pipe(
-    Effect.mapError((cause) => ({ _tag: "InvalidToken" as const, cause })),
-  )
+const decodeToken = (token: string) => Effect.fromResult(Base64Url.decode(token)).pipe(Effect.mapError((cause) => ({ _tag: "InvalidToken" as const, cause })))
 ```
 
 Read the installed v4 declarations for the exact return shape: some encoding

@@ -9,12 +9,7 @@ Complete API reference for Meeting object, REST endpoints, and SDK methods.
 ```typescript
 // Properties: id, userId, name, audioEnabled, videoEnabled, screenShareEnabled, audioTrack, videoTrack, screenShareTracks, roomJoined, roomState
 // Methods
-;(await meeting.self.enableAudio()) /
-  disableAudio() /
-  enableVideo() /
-  disableVideo() /
-  enableScreenShare() /
-  disableScreenShare()
+;(await meeting.self.enableAudio()) / disableAudio() / enableVideo() / disableVideo() / enableScreenShare() / disableScreenShare()
 await meeting.self.setName("Name") // Before join only
 await meeting.self.setDevice(device)
 const devices = (await meeting.self.getAllDevices()) / getAudioDevices() / getVideoDevices() / getSpeakerDevices()

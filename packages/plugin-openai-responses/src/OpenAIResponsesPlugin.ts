@@ -18,8 +18,5 @@ export function make(options: OpenAIResponsesPluginOptions & { gatewayKey: Redac
 export function make(options: OpenAIResponsesPluginOptions): OpenAIResponsesPlugin
 /** Declare the Responses HTTP ingress, upstream deployments, or both. */
 export function make(options: OpenAIResponsesPluginOptions): OpenAIResponsesPlugin {
-  return { id: "openai-responses",
-    ...(options.deployments ? { deployments: options.deployments } : {}),
-    ...(options.gatewayKey ? { http: OpenAIResponsesHttp.make({ gatewayKey: options.gatewayKey }) } : {}),
-  }
+  return { id: "openai-responses", ...(options.deployments ? { deployments: options.deployments } : {}), ...(options.gatewayKey ? { http: OpenAIResponsesHttp.make({ gatewayKey: options.gatewayKey }) } : {}) }
 }

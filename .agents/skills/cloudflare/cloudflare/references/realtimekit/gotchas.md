@@ -138,9 +138,7 @@ TURN automatically configured in SDK when enabled in account.
 ```typescript
 // Check devices
 const devices = await meeting.self.getAllDevices()
-meeting.self.on("deviceListUpdate", ({ added, removed, devices }) =>
-  console.log("Devices:", { added, removed, devices }),
-)
+meeting.self.on("deviceListUpdate", ({ added, removed, devices }) => console.log("Devices:", { added, removed, devices }))
 
 // Monitor participants
 meeting.participants.joined.on("participantJoined", (p) =>
@@ -164,12 +162,8 @@ meeting.self.on("roomJoined", () =>
 )
 
 // Log all events
-;["roomJoined", "audioUpdate", "videoUpdate", "screenShareUpdate", "deviceUpdate", "deviceListUpdate"].forEach(
-  (event) => meeting.self.on(event, (data) => console.log(`[self] ${event}:`, data)),
-)
-;["participantJoined", "participantLeft"].forEach((event) =>
-  meeting.participants.joined.on(event, (data) => console.log(`[participants] ${event}:`, data)),
-)
+;["roomJoined", "audioUpdate", "videoUpdate", "screenShareUpdate", "deviceUpdate", "deviceListUpdate"].forEach((event) => meeting.self.on(event, (data) => console.log(`[self] ${event}:`, data)))
+;["participantJoined", "participantLeft"].forEach((event) => meeting.participants.joined.on(event, (data) => console.log(`[participants] ${event}:`, data)))
 meeting.chat.on("chatUpdate", (data) => console.log("[chat] chatUpdate:", data))
 ```
 

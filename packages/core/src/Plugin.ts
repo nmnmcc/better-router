@@ -20,11 +20,7 @@ export const SetupError = Schema.TaggedUnion({
 export type SetupError = typeof SetupError.Type
 
 /** A plugin is a declaration, not a command to register capabilities. */
-export interface RouterPlugin<
-  Id extends string = string,
-  Requirements = never,
-  Api extends HttpApi.Constraint = HttpApi.Constraint,
-> {
+export interface RouterPlugin<Id extends string = string, Requirements = never, Api extends HttpApi.Constraint = HttpApi.Constraint> {
   readonly id: Id
   readonly deployments?: readonly ModelDeployment<Requirements>[]
   readonly policies?: readonly RoutingPolicy[]
@@ -34,5 +30,4 @@ export interface RouterPlugin<
   readonly start?: (router: Router) => Effect.Effect<void, SetupError, Requirements | Scope.Scope>
 }
 
-export type PluginRequirements<Plugin> =
-  Plugin extends RouterPlugin<string, infer Requirements, HttpApi.Constraint> ? Requirements : never
+export type PluginRequirements<Plugin> = Plugin extends RouterPlugin<string, infer Requirements, HttpApi.Constraint> ? Requirements : never

@@ -14,7 +14,7 @@ it("declares Chat ingress and deployments separately or together with redacted c
   const upstream = deployment({ id: "chat", model: "private", apiKey: key })
   expect(plugin({ gatewayKey: key }).http).type.not.toBe<undefined>()
   if (Result.isSuccess(upstream)) {
-    expect(plugin({ deployments: [upstream.success] }).deployments).type.toBeAssignableTo<readonly typeof upstream.success[] | undefined>()
+    expect(plugin({ deployments: [upstream.success] }).deployments).type.toBeAssignableTo<readonly (typeof upstream.success)[] | undefined>()
     expect(plugin({ gatewayKey: key, deployments: [upstream.success] }).http).type.not.toBe<undefined>()
   }
   // @ts-expect-error No overload matches this call

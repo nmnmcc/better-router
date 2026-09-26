@@ -85,8 +85,7 @@ const SendMail = Workflow.make("mail.Send", {
   idempotencyKey: ({ id }) => id,
 })
 
-const sendMail = ({ to }: { readonly id: string; readonly to: string }) =>
-  Effect.log(`send mail to ${to}`).pipe(Effect.asVoid)
+const sendMail = ({ to }: { readonly id: string; readonly to: string }) => Effect.log(`send mail to ${to}`).pipe(Effect.asVoid)
 
 const PersistedQueueLayer = PersistedQueue.layer.pipe(Layer.provideMerge(PersistedQueue.layerStoreMemory))
 
@@ -201,16 +200,9 @@ const Users = EventGroup.empty.add({
 })
 const UserSchema = EventLog.schema(Users)
 
-const Handlers = EventLog.group(Users, (handlers) =>
-  handlers.handle("UserCreated", ({ payload }) => Effect.log(`rebuild user ${payload.id}`).pipe(Effect.asVoid)),
-).pipe(Layer.provide(EventLog.layerRegistry))
+const Handlers = EventLog.group(Users, (handlers) => handlers.handle("UserCreated", ({ payload }) => Effect.log(`rebuild user ${payload.id}`).pipe(Effect.asVoid))).pipe(Layer.provide(EventLog.layerRegistry))
 
-const LogLayer = EventLog.layer(UserSchema, Handlers).pipe(
-  Layer.provide(EventJournal.layerMemory),
-  Layer.provide(
-    Layer.effect(EventLog.Identity, EventLog.makeIdentity).pipe(Layer.provide(EventLogEncryption.layerSubtle)),
-  ),
-)
+const LogLayer = EventLog.layer(UserSchema, Handlers).pipe(Layer.provide(EventJournal.layerMemory), Layer.provide(Layer.effect(EventLog.Identity, EventLog.makeIdentity).pipe(Layer.provide(EventLogEncryption.layerSubtle))))
 
 const append = Effect.gen(function* () {
   const write = yield* EventLog.makeClient(UserSchema)

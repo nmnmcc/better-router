@@ -26,60 +26,85 @@ const settings = Config.all({
   port: Config.Int("GATEWAY_PORT").pipe(Config.withDefault(8787)),
 })
 const HostConfig = Schema.Struct({
-  gatewayKey: Schema.NonEmptyString, openAIKey: Schema.String, anthropicKey: Schema.String,
-  openAIModel: Schema.String, anthropicModel: Schema.String, publicModel: Schema.NonEmptyString,
-  chatUrl: Schema.URL, responsesUrl: Schema.URL, anthropicUrl: Schema.URL,
-  anthropicMaxTokens: Schema.Int, host: Schema.NonEmptyString,
+  gatewayKey: Schema.NonEmptyString,
+  openAIKey: Schema.String,
+  anthropicKey: Schema.String,
+  openAIModel: Schema.String,
+  anthropicModel: Schema.String,
+  publicModel: Schema.NonEmptyString,
+  chatUrl: Schema.URL,
+  responsesUrl: Schema.URL,
+  anthropicUrl: Schema.URL,
+  anthropicMaxTokens: Schema.Int,
+  host: Schema.NonEmptyString,
   port: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })),
 })
 const HostConfigError = Schema.Struct({ message: Schema.String })
 
 /** Each executable entrypoint declares exactly one ingress and one deployment. */
 export function start(ingress: Protocol, upstream: Protocol): void {
-  const server = Layer.unwrap(Effect.gen(function* () {
-    const config = yield* settings.pipe(Effect.flatMap(Schema.decodeUnknownEffect(HostConfig)))
-    if (upstream === "anthropic" ? !config.anthropicKey || !config.anthropicModel
-      : !config.openAIKey || !config.openAIModel) {
-      return yield* Effect.fail(HostConfigError.make({ message: "Selected upstream key and model are required" }))
-    }
-    const gatewayKey = Redacted.make(config.gatewayKey)
-    const id = `${upstream}-main`
-    const chatDeployment = upstream === "chat"
-      ? yield* Effect.fromResult(OpenAIChatCompletions.make({
-          id, model: config.openAIModel, apiKey: Redacted.make(config.openAIKey), url: config.chatUrl,
-        }))
-      : undefined
-    const responsesDeployment = upstream === "responses"
-      ? yield* Effect.fromResult(OpenAIResponses.make({
-          id, model: config.openAIModel, apiKey: Redacted.make(config.openAIKey), url: config.responsesUrl,
-        }))
-      : undefined
-    const anthropicDeployment = upstream === "anthropic"
-      ? yield* Effect.fromResult(AnthropicMessages.make({
-          id, model: config.anthropicModel, apiKey: Redacted.make(config.anthropicKey),
-          url: config.anthropicUrl, defaultMaxTokens: config.anthropicMaxTokens,
-        }))
-      : undefined
-    const chat = OpenAIChatCompletionsPlugin.make({
-      ...(ingress === "chat" ? { gatewayKey } : {}),
-      ...(chatDeployment ? { deployments: [chatDeployment] } : {}),
-    })
-    const responses = OpenAIResponsesPlugin.make({
-      ...(ingress === "responses" ? { gatewayKey } : {}),
-      ...(responsesDeployment ? { deployments: [responsesDeployment] } : {}),
-    })
-    const anthropic = AnthropicMessagesPlugin.make({
-      ...(ingress === "anthropic" ? { gatewayKey } : {}),
-      ...(anthropicDeployment ? { deployments: [anthropicDeployment] } : {}),
-    })
-    const routes = Layer.unwrap(Router.make({
-      plugins: [chat, responses, anthropic] as const,
-      routes: [{ model: config.publicModel, deployments: [id] }],
-    }).pipe(Effect.map((router) => router.http.routes)))
-    return HttpRouter.serve(routes).pipe(
-      Layer.provide(NodeHttpServer.layer(createServer, { host: config.host, port: config.port })),
-      Layer.provide(NodeHttpClient.layerUndici),
-    )
-  }))
+  const server = Layer.unwrap(
+    Effect.gen(function* () {
+      const config = yield* settings.pipe(Effect.flatMap(Schema.decodeUnknownEffect(HostConfig)))
+      if (upstream === "anthropic" ? !config.anthropicKey || !config.anthropicModel : !config.openAIKey || !config.openAIModel) {
+        return yield* Effect.fail(HostConfigError.make({ message: "Selected upstream key and model are required" }))
+      }
+      const gatewayKey = Redacted.make(config.gatewayKey)
+      const id = `${upstream}-main`
+      const chatDeployment =
+        upstream === "chat"
+          ? yield* Effect.fromResult(
+              OpenAIChatCompletions.make({
+                id,
+                model: config.openAIModel,
+                apiKey: Redacted.make(config.openAIKey),
+                url: config.chatUrl,
+              }),
+            )
+          : undefined
+      const responsesDeployment =
+        upstream === "responses"
+          ? yield* Effect.fromResult(
+              OpenAIResponses.make({
+                id,
+                model: config.openAIModel,
+                apiKey: Redacted.make(config.openAIKey),
+                url: config.responsesUrl,
+              }),
+            )
+          : undefined
+      const anthropicDeployment =
+        upstream === "anthropic"
+          ? yield* Effect.fromResult(
+              AnthropicMessages.make({
+                id,
+                model: config.anthropicModel,
+                apiKey: Redacted.make(config.anthropicKey),
+                url: config.anthropicUrl,
+                defaultMaxTokens: config.anthropicMaxTokens,
+              }),
+            )
+          : undefined
+      const chat = OpenAIChatCompletionsPlugin.make({
+        ...(ingress === "chat" ? { gatewayKey } : {}),
+        ...(chatDeployment ? { deployments: [chatDeployment] } : {}),
+      })
+      const responses = OpenAIResponsesPlugin.make({
+        ...(ingress === "responses" ? { gatewayKey } : {}),
+        ...(responsesDeployment ? { deployments: [responsesDeployment] } : {}),
+      })
+      const anthropic = AnthropicMessagesPlugin.make({
+        ...(ingress === "anthropic" ? { gatewayKey } : {}),
+        ...(anthropicDeployment ? { deployments: [anthropicDeployment] } : {}),
+      })
+      const routes = Layer.unwrap(
+        Router.make({
+          plugins: [chat, responses, anthropic] as const,
+          routes: [{ model: config.publicModel, deployments: [id] }],
+        }).pipe(Effect.map((router) => router.http.routes)),
+      )
+      return HttpRouter.serve(routes).pipe(Layer.provide(NodeHttpServer.layer(createServer, { host: config.host, port: config.port })), Layer.provide(NodeHttpClient.layerUndici))
+    }),
+  )
   Layer.launch(server).pipe(NodeRuntime.runMain)
 }

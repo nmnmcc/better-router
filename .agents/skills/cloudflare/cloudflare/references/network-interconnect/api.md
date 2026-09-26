@@ -45,9 +45,7 @@ DELETE /accounts/{account_id}/cni/interconnects/{icon}
 
 ```json
 {
-  "result": [
-    { "id": "icon_abc", "name": "prod", "type": "direct", "facility": "EWR1", "speed": "10G", "status": "active" }
-  ]
+  "result": [{ "id": "icon_abc", "name": "prod", "type": "direct", "facility": "EWR1", "speed": "10G", "status": "active" }]
 }
 ```
 

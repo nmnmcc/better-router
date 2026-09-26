@@ -108,8 +108,7 @@ export default {
   },
   async scheduled(event: ScheduledEvent, env: Env): Promise<void> {
     const recentAttacks = await getRecentAttacks(env.KV)
-    if (recentAttacks.length === 0)
-      await setProtectionLevel(env.ZONE_ID, ProtectionLevel.MEDIUM, managedRulesetId, client)
+    if (recentAttacks.length === 0) await setProtectionLevel(env.ZONE_ID, ProtectionLevel.MEDIUM, managedRulesetId, client)
   },
 }
 ```

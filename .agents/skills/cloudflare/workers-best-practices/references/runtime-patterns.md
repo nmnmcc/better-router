@@ -276,10 +276,7 @@ const token = Array.from(tokenBytes)
 // Constant-time comparison — hash first to avoid length leak
 async function verifyToken(provided: string, expected: string): Promise<boolean> {
   const encoder = new TextEncoder()
-  const [providedHash, expectedHash] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(provided)),
-    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
-  ])
+  const [providedHash, expectedHash] = await Promise.all([crypto.subtle.digest("SHA-256", encoder.encode(provided)), crypto.subtle.digest("SHA-256", encoder.encode(expected))])
   return crypto.subtle.timingSafeEqual(providedHash, expectedHash)
 }
 ```

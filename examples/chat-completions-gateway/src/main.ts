@@ -18,9 +18,13 @@ const settings = Config.all({
   port: Config.Int("GATEWAY_PORT").pipe(Config.withDefault(8787)),
 })
 const HostConfig = Schema.Struct({
-  apiKey: Schema.Redacted(Schema.NonEmptyString), gatewayKey: Schema.Redacted(Schema.NonEmptyString),
-  upstreamModel: Schema.NonEmptyString, publicModel: Schema.String, url: Schema.URL,
-  host: Schema.NonEmptyString, port: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })),
+  apiKey: Schema.Redacted(Schema.NonEmptyString),
+  gatewayKey: Schema.Redacted(Schema.NonEmptyString),
+  upstreamModel: Schema.NonEmptyString,
+  publicModel: Schema.String,
+  url: Schema.URL,
+  host: Schema.NonEmptyString,
+  port: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })),
 })
 
 const server = Layer.unwrap(
@@ -28,9 +32,14 @@ const server = Layer.unwrap(
     const config = yield* settings.pipe(Effect.flatMap(Schema.decodeUnknownEffect(HostConfig)))
     const publicModel = config.publicModel || config.upstreamModel
     const chatCompletions = OpenAIChatCompletionsPlugin.make({ gatewayKey: config.gatewayKey })
-    const deployment = yield* Effect.fromResult(OpenAIResponses.make({
-      id: "openai-main", model: config.upstreamModel, apiKey: config.apiKey, url: config.url,
-    }))
+    const deployment = yield* Effect.fromResult(
+      OpenAIResponses.make({
+        id: "openai-main",
+        model: config.upstreamModel,
+        apiKey: config.apiKey,
+        url: config.url,
+      }),
+    )
     const responses = OpenAIResponsesPlugin.make({
       deployments: [deployment],
     })

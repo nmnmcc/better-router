@@ -27,9 +27,7 @@ export function read(request: HttpServerRequest.HttpServerRequest, authorized: b
       },
     ).pipe(Effect.mapError((): HttpJsonError => ({ status: 400, message: "Invalid request body" })))
     if (body.size > limit) return yield* Effect.fail({ status: 413, message: "Request too large" })
-    const bytes = Uint8Array.from(Chunk.toReadonlyArray(
-      Chunk.flatMap(body.chunks, (chunk) => Chunk.fromIterable(chunk)),
-    ))
+    const bytes = Uint8Array.from(Chunk.toReadonlyArray(Chunk.flatMap(body.chunks, (chunk) => Chunk.fromIterable(chunk))))
     const raw = yield* Effect.try({
       try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
       catch: (): HttpJsonError => ({ status: 400, message: "Invalid UTF-8 request" }),

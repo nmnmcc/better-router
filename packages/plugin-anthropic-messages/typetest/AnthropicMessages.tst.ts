@@ -16,9 +16,7 @@ it("accepts HTTP but not upstream WebSocket", () => {
     execute: { http: execute },
   } as const satisfies AnthropicMessagesDeployment
   expect(anthropic.execute.http).type.toBe<typeof execute>()
-  expect<{ http: typeof execute; websocket: typeof execute }>().type.not.toBeAssignableTo<
-    AnthropicMessagesDeployment["execute"]
-  >()
+  expect<{ http: typeof execute; websocket: typeof execute }>().type.not.toBeAssignableTo<AnthropicMessagesDeployment["execute"]>()
 })
 
 it("declares Messages ingress and deployments with an explicit default token limit", () => {

@@ -83,15 +83,7 @@ Content-Type: application/json
 ```json
 {
   "iceServers": {
-    "urls": [
-      "stun:stun.cloudflare.com:3478",
-      "turn:turn.cloudflare.com:3478?transport=udp",
-      "turn:turn.cloudflare.com:3478?transport=tcp",
-      "turn:turn.cloudflare.com:53?transport=udp",
-      "turn:turn.cloudflare.com:80?transport=tcp",
-      "turns:turn.cloudflare.com:5349?transport=tcp",
-      "turns:turn.cloudflare.com:443?transport=tcp"
-    ],
+    "urls": ["stun:stun.cloudflare.com:3478", "turn:turn.cloudflare.com:3478?transport=udp", "turn:turn.cloudflare.com:3478?transport=tcp", "turn:turn.cloudflare.com:53?transport=udp", "turn:turn.cloudflare.com:80?transport=tcp", "turns:turn.cloudflare.com:5349?transport=tcp", "turns:turn.cloudflare.com:443?transport=tcp"],
     "username": "1738035200:user123",
     "credential": "base64encodedhmac=="
   }

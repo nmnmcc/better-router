@@ -30,10 +30,7 @@ import { Effect, Ref } from "effect"
 
 const program = Effect.gen(function* () {
   const balance = yield* Ref.make(100)
-  const withdraw = (amount: number) =>
-    Ref.modify(balance, (current) =>
-      current >= amount ? [{ ok: true as const }, current - amount] : [{ ok: false as const }, current],
-    )
+  const withdraw = (amount: number) => Ref.modify(balance, (current) => (current >= amount ? [{ ok: true as const }, current - amount] : [{ ok: false as const }, current]))
 
   const result = yield* withdraw(30)
   return { result, remaining: yield* Ref.get(balance) }

@@ -4,8 +4,7 @@ import type { RouterPlugin } from "@better-router/core/Plugin"
 import * as OpenAIChatCompletionsHttp from "./OpenAIChatCompletionsHttp.js"
 import type { OpenAIChatCompletionsDeployment } from "./OpenAIChatCompletionsUpstream.js"
 
-export interface OpenAIChatCompletionsPlugin
-  extends RouterPlugin<"openai-chat-completions", HttpClient.HttpClient, typeof OpenAIChatCompletionsHttp.api> {
+export interface OpenAIChatCompletionsPlugin extends RouterPlugin<"openai-chat-completions", HttpClient.HttpClient, typeof OpenAIChatCompletionsHttp.api> {
   readonly http?: ReturnType<typeof OpenAIChatCompletionsHttp.make>
   readonly deployments?: readonly OpenAIChatCompletionsDeployment[]
 }
