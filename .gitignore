@@ -6,3 +6,4 @@ dist/
 coverage/
 .types/
 *.tsbuildinfo
+.pre-commit-config.yaml

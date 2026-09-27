@@ -86,11 +86,11 @@ Each slice replaces its old path before deleting helpers; do not retain parallel
 
 The implementation stays inside existing conversion modules; it does not change `ModelRequest`, router contracts, provider envelopes, or native stream contracts.
 
-| Before                                                                         | After                                                                                                                       |
-| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| Native drafts were flexible records or string-or-array unions | Chat uses typed message/call/tool drafts; Anthropic uses tagged message content and typed blocks |
-| Chat handler decoded the same body twice | `parseRequest` returns one canonical request plus ingress facts; `toResponseRequest` remains a compatibility projection |
-| Responses used three flatMap/find passes for input facts | `InputFacts` collects item, part, and image observations in one immutable traversal with old error precedence |
+| Before                                                           | After                                                                                                                                   |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Native drafts were flexible records or string-or-array unions    | Chat uses typed message/call/tool drafts; Anthropic uses tagged message content and typed blocks                                        |
+| Chat handler decoded the same body twice                         | `parseRequest` returns one canonical request plus ingress facts; `toResponseRequest` remains a compatibility projection                 |
+| Responses used three flatMap/find passes for input facts         | `InputFacts` collects item, part, and image observations in one immutable traversal with old error precedence                           |
 | Mixed calls/results and source-form preservation lacked coverage | Chat, Anthropic, and Responses tests cover adjacent calls/results, omitted/null/empty tools, input immutability, and nested error paths |
 
 The native JSON remains equivalent at the tested observable shape: ordinary strings remain strings, part arrays remain arrays, tool-only assistants retain `content: null`, function arguments remain JSON strings, and `tools` omission/presence is unchanged. The Anthropic encoder is explicit because its tagged draft differs from wire JSON; Chat's final request is already the wire shape. Responses keeps the complete decoded request and only normalizes the local validation facts.

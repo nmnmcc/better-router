@@ -1,6 +1,14 @@
 { pkgs, ... }:
 
 {
+  git-hooks.hooks.treefmt = {
+    enable = true;
+    settings.formatters = [
+      pkgs.prettier
+      pkgs.nixfmt
+    ];
+  };
+
   packages = [
     pkgs.treefmt
     pkgs.prettier

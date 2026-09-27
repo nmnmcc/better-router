@@ -35,6 +35,6 @@ devenv shell -- yarn check
 devenv shell -- yarn build
 ```
 
-Run `devenv shell -- treefmt` to format project files, or `devenv shell -- treefmt --ci` to fail if formatting changes are needed (`--ci` also writes those changes). The configuration excludes vendored `references/` projects and lockfiles.
+Run `devenv shell -- treefmt` to format project files, or `devenv shell -- treefmt --ci` to fail if formatting changes are needed (`--ci` also writes those changes). The configuration excludes vendored `references/` projects and lockfiles. Entering `devenv shell` installs a pre-commit hook for staged-file formatting; run `devenv test` to verify the hook.
 
 Runtime and type contracts live beside each package in `test/` and `typetest/`; cross-package type checks live in the root `typetest/`. See [Testing](docs/testing.md) for conventions and focused commands. `devenv shell -- yarn check` builds and runs all type and runtime tests without a live provider key; `devenv shell -- yarn test:coverage` generates a local report.
