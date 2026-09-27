@@ -30,6 +30,37 @@ export const api = HttpApi.make("openai-responses").add(
 const allowed = ["model", "input", "instructions", "tools", "tool_choice", "text", "max_output_tokens", "temperature", "top_p", "presence_penalty", "frequency_penalty", "parallel_tool_calls", "stream", "stream_options", "store", "metadata", "previous_response_id"] as const
 const allowedPart = (type: string): readonly string[] => (type === "input_text" ? ["type", "text"] : type === "input_image" ? ["type", "image_url", "detail"] : type === "output_text" ? ["type", "text", "annotations"] : ["type"])
 
+type InputFacts = {
+  readonly unsupportedItem: number | undefined
+  readonly unsupportedPart: { readonly path: string; readonly extra: string } | undefined
+  readonly invalidImage: string | undefined
+}
+
+type NativePart = {
+  readonly type: string
+  readonly image_url?: unknown
+  readonly [key: string]: unknown
+}
+
+const emptyInputFacts = (): InputFacts => ({ unsupportedItem: undefined, unsupportedPart: undefined, invalidImage: undefined })
+
+const collectInputFacts = (request: typeof Request.Type): InputFacts => {
+  if (!Array.isArray(request.input)) return emptyInputFacts()
+  return request.input.reduce<InputFacts>((facts, entry, index) => {
+    if (facts.unsupportedItem !== undefined) return facts
+    if (!["message", "function_call", "function_call_output"].includes(entry.type)) return { ...facts, unsupportedItem: index }
+    if (entry.type !== "message" || !Array.isArray(entry.content)) return facts
+    const parts: readonly NativePart[] = entry.content
+    return parts.reduce<InputFacts>((current, part, position) => {
+      const path = `request.input[${index}].content[${position}]`
+      const extra = Object.keys(part).find((key) => !allowedPart(part.type).includes(key))
+      const unsupportedPart = current.unsupportedPart ?? (extra === undefined ? undefined : { path, extra })
+      const invalidImage = current.invalidImage ?? (part.type === "input_image" && typeof part.image_url === "string" && !/^https?:\/\/\S+$/.test(part.image_url) && !/^data:image\/(?:png|jpeg|gif|webp);base64,[a-zA-Z0-9+/=]+$/.test(part.image_url) ? `${path}.image_url` : undefined)
+      return { ...current, unsupportedPart, invalidImage }
+    }, facts)
+  }, emptyInputFacts())
+}
+
 /** Decode the complete wire shape, then reject semantics this ingress cannot project. */
 export function toResponseRequest(value: unknown): Result.Result<ModelRequest, ConversionError> {
   return Result.gen(function* () {
@@ -37,16 +68,10 @@ export function toResponseRequest(value: unknown): Result.Result<ModelRequest, C
     yield* requireThat(!!request.model, "request.model", "invalid", "model is required")
     const excluded = Object.entries(request).find(([key, entry]) => entry !== undefined && !allowed.includes(key as (typeof allowed)[number]))
     if (excluded) return yield* Result.fail(at(`request.${excluded[0]}`, "unsupported", "no portable mapping"))
-    if (Array.isArray(request.input)) {
-      const item = request.input.findIndex((entry) => !["message", "function_call", "function_call_output"].includes(entry.type))
-      if (item >= 0) return yield* Result.fail(at(`request.input[${item}].type`, "unsupported", "input item"))
-      const parts = request.input.flatMap((entry, index) => (entry.type === "message" && Array.isArray(entry.content) ? entry.content.map((part: { readonly type: string }, position: number) => ({ part, path: `request.input[${index}].content[${position}]` })) : []))
-      const unsupportedPart = parts.map(({ part, path }) => ({ path, extra: Object.keys(part).find((key) => !allowedPart(part.type).includes(key)) })).find(({ extra }) => extra !== undefined)
-      if (unsupportedPart) return yield* Result.fail(at(`${unsupportedPart.path}.${unsupportedPart.extra}`, "unsupported", "no portable mapping"))
-      const images = request.input.flatMap((entry, index) => (entry.type === "message" && Array.isArray(entry.content) ? entry.content.map((part: { readonly type: string; readonly image_url?: string | null }, position: number) => ({ part, path: `request.input[${index}].content[${position}].image_url` })) : []))
-      const invalidImage = images.find(({ part }) => part.type === "input_image" && typeof part.image_url === "string" && !/^https?:\/\/\S+$/.test(part.image_url) && !/^data:image\/(?:png|jpeg|gif|webp);base64,[a-zA-Z0-9+/=]+$/.test(part.image_url))
-      if (invalidImage) return yield* Result.fail(at(invalidImage.path, "unsupported", "only URL and base64 image data are portable"))
-    }
+    const inputFacts = collectInputFacts(request)
+    if (inputFacts.unsupportedItem !== undefined) return yield* Result.fail(at(`request.input[${inputFacts.unsupportedItem}].type`, "unsupported", "input item"))
+    if (inputFacts.unsupportedPart) return yield* Result.fail(at(`${inputFacts.unsupportedPart.path}.${inputFacts.unsupportedPart.extra}`, "unsupported", "no portable mapping"))
+    if (inputFacts.invalidImage) return yield* Result.fail(at(inputFacts.invalidImage, "unsupported", "only URL and base64 image data are portable"))
     if (request.tools) {
       const tool = request.tools.findIndex((entry) => entry.type !== "function")
       if (tool >= 0) return yield* Result.fail(at(`request.tools[${tool}].type`, "unsupported", "only function tools are portable"))

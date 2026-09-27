@@ -84,3 +84,50 @@ it("upstream conversion rejects unportable phase, annotations and strict tool se
     cases.map(() => true),
   )
 })
+
+it("groups outgoing text, calls and results without changing source forms", () => {
+  const input = [
+    { type: "message", role: "assistant", content: "Checking" },
+    { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"x"}' },
+    { type: "function_call", call_id: "call_2", name: "log", arguments: "{}" },
+    { type: "function_call_output", call_id: "call_1", output: "found" },
+    { type: "function_call_output", call_id: "call_2", output: [{ type: "input_text", text: "saved" }] },
+    { type: "message", role: "user", content: "Continue" },
+    { type: "message", role: "assistant", content: [{ type: "output_text", text: "Done" }] },
+  ] as const
+  const before = structuredClone(input)
+  const result = toMessagesRequest({ model: "private", input, tools: [] }, 64)
+  assert.ok(Result.isSuccess(result))
+  assert.deepEqual(result.success, {
+    model: "private",
+    max_tokens: 64,
+    messages: [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Checking" },
+          { type: "tool_use", id: "call_1", name: "lookup", input: { query: "x" } },
+          { type: "tool_use", id: "call_2", name: "log", input: {} },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "call_1", content: "found" },
+          { type: "tool_result", tool_use_id: "call_2", content: [{ type: "text", text: "saved" }] },
+        ],
+      },
+      { role: "user", content: "Continue" },
+      { role: "assistant", content: [{ type: "text", text: "Done" }] },
+    ],
+    stream: true,
+    tools: [],
+  })
+  assert.deepEqual(input, before)
+  const omitted = toMessagesRequest({ model: "private", input: "Hi" }, 64)
+  const nullable = toMessagesRequest({ model: "private", input: "Hi", tools: null }, 64)
+  assert.ok(Result.isSuccess(omitted))
+  assert.ok(Result.isSuccess(nullable))
+  assert.deepEqual(omitted.success, { model: "private", max_tokens: 64, messages: [{ role: "user", content: "Hi" }], stream: true })
+  assert.deepEqual(nullable.success, omitted.success)
+})

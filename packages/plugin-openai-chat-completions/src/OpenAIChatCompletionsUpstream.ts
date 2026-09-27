@@ -35,6 +35,59 @@ export interface OpenAIChatCompletionsDeployment extends ModelDeployment<HttpCli
 const fail = (kind: ProviderError["kind"], message: string, retryable = false, cause?: unknown): ProviderError => ({ kind, message, retryable, ...(cause === undefined ? {} : { cause }) })
 const isError = Schema.is(Schema.Struct({ kind: Schema.String, message: Schema.String, retryable: Schema.Boolean }))
 
+type ChatTextPart = {
+  readonly type: "text"
+  readonly text: string
+}
+
+type ChatImagePart = {
+  readonly type: "image_url"
+  readonly image_url: {
+    readonly url: string
+    readonly detail: "auto" | "low" | "high"
+  }
+}
+
+type ChatContent = string | readonly (ChatTextPart | ChatImagePart)[]
+
+type ChatFunctionCall = {
+  readonly id: string
+  readonly type: "function"
+  readonly function: {
+    readonly name: string
+    readonly arguments: string
+  }
+}
+
+type ChatInstructionMessage = {
+  readonly role: "system" | "developer" | "user"
+  readonly content: ChatContent
+}
+
+type ChatAssistantMessage = {
+  readonly role: "assistant"
+  readonly content: ChatContent | null
+  readonly tool_calls?: readonly ChatFunctionCall[]
+}
+
+type ChatToolMessage = {
+  readonly role: "tool"
+  readonly tool_call_id: string
+  readonly content: string | readonly ChatTextPart[]
+}
+
+type ChatMessage = ChatInstructionMessage | ChatAssistantMessage | ChatToolMessage
+
+type ChatTool = {
+  readonly type: "function"
+  readonly function: {
+    readonly name: string
+    readonly description?: string
+    readonly parameters?: Record<string, unknown>
+    readonly strict?: boolean
+  }
+}
+
 /** Translate an OpenResponses request into a single-choice Chat Completions request. */
 export function toChatRequest(request: ModelRequest): Result.Result<Record<string, unknown>, ProviderError> {
   return Result.gen(function* () {
@@ -43,7 +96,7 @@ export function toChatRequest(request: ModelRequest): Result.Result<Record<strin
     if (extra) return yield* Result.fail(fail("unsupported", `Cannot map ${extra[0]} to Chat Completions`))
     if (request.store === true) return yield* Result.fail(fail("unsupported", "Cannot map store: true to Chat Completions"))
     const input: readonly InputItem[] = typeof request.input === "string" ? [{ type: "message", role: "user", content: request.input }] : (request.input ?? [])
-    const messages = yield* input.reduce<Result.Result<readonly Record<string, unknown>[], ProviderError>>(
+    const messages = yield* input.reduce<Result.Result<readonly ChatMessage[], ProviderError>>(
       (current, item, index) =>
         Result.gen(function* () {
           const output = yield* current
@@ -57,7 +110,7 @@ export function toChatRequest(request: ModelRequest): Result.Result<Record<strin
             const content =
               typeof item.content === "string"
                 ? item.content
-                : yield* (item.content ?? []).reduce<Result.Result<readonly Record<string, unknown>[], ProviderError>>(
+                : yield* (item.content ?? []).reduce<Result.Result<readonly (ChatTextPart | ChatImagePart)[], ProviderError>>(
                     (parts, part, partIndex) =>
                       Result.gen(function* () {
                         const entries = yield* parts
@@ -76,20 +129,21 @@ export function toChatRequest(request: ModelRequest): Result.Result<Record<strin
                       }),
                     Result.succeed([]),
                   )
-            return [...output, { role: item.role, content }]
+            const message: ChatMessage = item.role === "assistant" ? { role: "assistant", content } : { role: item.role, content }
+            return [...output, message]
           }
           if (item.type === "function_call") {
             if (item.status && item.status !== "completed") return yield* Result.fail(fail("unsupported", `Cannot map ${path}.status to Chat Completions`))
-            const call = { id: item.call_id, type: "function", function: { name: item.name, arguments: item.arguments } }
+            const call: ChatFunctionCall = { id: item.call_id, type: "function", function: { name: item.name, arguments: item.arguments } }
             const last = output.at(-1)
-            return last?.role === "assistant" ? [...output.slice(0, -1), { ...last, tool_calls: [...(Array.isArray(last.tool_calls) ? last.tool_calls : []), call] }] : [...output, { role: "assistant", content: null, tool_calls: [call] }]
+            return last?.role === "assistant" ? [...output.slice(0, -1), { ...last, tool_calls: [...(last.tool_calls ?? []), call] }] : [...output, { role: "assistant", content: null, tool_calls: [call] }]
           }
           if (item.type === "function_call_output") {
             if (item.status && item.status !== "completed") return yield* Result.fail(fail("unsupported", `Cannot map ${path}.status to Chat Completions`))
             const content =
               typeof item.output === "string"
                 ? item.output
-                : yield* item.output.reduce<Result.Result<readonly Record<string, unknown>[], ProviderError>>(
+                : yield* item.output.reduce<Result.Result<readonly ChatTextPart[], ProviderError>>(
                     (parts, part, partIndex) =>
                       Result.gen(function* () {
                         const entries = yield* parts
@@ -104,7 +158,7 @@ export function toChatRequest(request: ModelRequest): Result.Result<Record<strin
         }),
       Result.succeed(request.instructions ? [{ role: "system", content: request.instructions }] : []),
     )
-    const tools = yield* (request.tools ?? []).reduce<Result.Result<readonly Record<string, unknown>[], ProviderError>>(
+    const tools = yield* (request.tools ?? []).reduce<Result.Result<readonly ChatTool[], ProviderError>>(
       (current, tool, index) =>
         Result.gen(function* () {
           const entries = yield* current

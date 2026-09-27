@@ -1,6 +1,6 @@
 # Architecture
 
-The router uses Effect 4.0.0-rc.117 end to end. Chat Completions, OpenAI Responses, and Anthropic Messages each contribute HTTP ingress and upstream deployments. A plugin may declare either capability or both at router acquisition. The original Chat-to-Responses gateway and the nine [matrix examples](../examples/matrix/README.md) supply Node Layers and run with `tsx`.
+The router uses Effect 4.0.0-rc.117 end to end. Chat Completions, OpenAI Responses, and Anthropic Messages each contribute HTTP ingress and upstream deployments. A plugin may declare either capability or both at router acquisition. The nine [matrix examples](../examples/matrix/README.md) supply Node Layers and run with `tsx`.
 
 ## Modules and IR
 

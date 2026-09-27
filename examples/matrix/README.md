@@ -24,4 +24,4 @@ Chat and Responses clients send `Authorization: Bearer <GATEWAY_API_KEY>` to `/v
 devenv shell -- yarn check
 ```
 
-`check` runs every workspace's JSON and SSE test against a local fake target, including images, multi-turn tool results, JSON Schema, usage, upstream errors, malformed/truncated streams, overlarge requests and cancellation. No provider key or external network is used by the tests. The original `examples/chat-completions-gateway` workspace remains unchanged as a separate example.
+`check` runs every workspace's JSON and SSE test against a local fake target, including images, multi-turn tool results, JSON Schema, usage, upstream errors, malformed/truncated streams, overlarge requests and cancellation. No provider key or external network is used by the tests.

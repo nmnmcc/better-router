@@ -120,6 +120,15 @@ type Native = typeof ChatRequest.Type
 type Part = typeof textPart.Type
 type Message = typeof message.Type
 
+export type OpenAIChatCompletionsRequest = {
+  readonly request: ModelRequest
+  readonly ingress: {
+    readonly stream: boolean
+    readonly hasStreamOptions: boolean
+    readonly includeUsage: boolean
+  }
+}
+
 export const decodeRequest = (value: unknown): Result.Result<Native, ConversionError> => Result.mapError(Schema.decodeUnknownResult(ChatRequest)(value), (error) => fromSchema(error, "request"))
 
 const only = (value: object, path: string, keys: readonly string[]): Result.Result<void, ConversionError> => {
@@ -192,8 +201,8 @@ function convertMessage(source: Message, index: number): Result.Result<readonly 
   })
 }
 
-/** Parse untrusted Chat JSON before translating its supported semantics. */
-export function toResponseRequest(value: unknown): Result.Result<ModelRequest, ConversionError> {
+/** Parse untrusted Chat JSON once before translating its supported semantics. */
+export function parseRequest(value: unknown): Result.Result<OpenAIChatCompletionsRequest, ConversionError> {
   return Result.flatMap(decodeRequest(value), (source) =>
     Result.gen(function* () {
       yield* only(source, "request", ["model", "messages", "tools", "tool_choice", "response_format", "max_completion_tokens", "max_tokens", "temperature", "top_p", "presence_penalty", "frequency_penalty", "parallel_tool_calls", "stream", "stream_options", "store", "metadata", "n"])
@@ -262,7 +271,7 @@ export function toResponseRequest(value: unknown): Result.Result<ModelRequest, C
       }
       const outOfRange = (["temperature", "top_p", "presence_penalty", "frequency_penalty"] as const).find((key) => source[key] !== undefined && (!Number.isFinite(source[key]) || source[key]! < (key.endsWith("penalty") ? -2 : 0) || source[key]! > (key === "top_p" ? 1 : 2)))
       if (outOfRange) return yield* Result.fail(at(`request.${outOfRange}`, "invalid", "number out of range"))
-      return {
+      const request: ModelRequest = {
         model: source.model,
         input,
         ...(source.tools === undefined ? {} : { tools }),
@@ -272,6 +281,10 @@ export function toResponseRequest(value: unknown): Result.Result<ModelRequest, C
         ...Object.fromEntries((["temperature", "top_p", "presence_penalty", "frequency_penalty", "parallel_tool_calls", "stream", "store", "metadata"] as const).filter((key) => source[key] !== undefined).map((key) => [key, source[key]])),
         ...(source.stream_options === undefined ? {} : { stream_options: source.stream_options.include_obfuscation === undefined ? {} : { include_obfuscation: source.stream_options.include_obfuscation } }),
       }
+      return { request, ingress: { stream: source.stream === true, hasStreamOptions: source.stream_options !== undefined, includeUsage: source.stream_options?.include_usage ?? false } }
     }),
   )
 }
+
+/** Parse and project Chat JSON for callers that do not need transport options. */
+export const toResponseRequest = (value: unknown): Result.Result<ModelRequest, ConversionError> => Result.map(parseRequest(value), ({ request }) => request)

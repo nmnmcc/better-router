@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { it as test } from "vitest"
 import { Result, Schema } from "effect"
-import { OpenAIChatCompletionsConversionError, toChatRequest, toResponseRequest } from "@better-router/plugin-openai-chat-completions/OpenAIChatCompletions"
+import { OpenAIChatCompletionsConversionError, parseRequest, toChatRequest, toResponseRequest } from "@better-router/plugin-openai-chat-completions/OpenAIChatCompletions"
 
 const success = (value: unknown) => {
   const result = toResponseRequest(value)
@@ -200,4 +200,55 @@ test("upstream conversion refuses meaningful fields without a Chat projection", 
   const phased = toChatRequest({ model: "private", input: [{ type: "message", role: "assistant", phase: "commentary", content: "Working" }] })
   assert.ok(Result.isFailure(phased))
   assert.match(phased.failure.message, /phase/)
+})
+
+test("upstream conversion accumulates typed assistant calls without changing input", () => {
+  const request = {
+    model: "private",
+    input: [
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "Checking" }] },
+      { type: "function_call", call_id: "call_1", name: "lookup", arguments: `{"q":1}` },
+      { type: "function_call", call_id: "call_2", name: "log", arguments: "{}" },
+      { type: "function_call_output", call_id: "call_1", output: [{ type: "input_text", text: "done" }] },
+      { type: "function_call", call_id: "call_3", name: "finish", arguments: "{}" },
+    ],
+    tools: [{ type: "function", name: "lookup", description: "Look up a value", parameters: { type: "object" }, strict: false }],
+  } as const
+  const before = JSON.parse(JSON.stringify(request.input))
+  const result = toChatRequest(request)
+  assert.ok(Result.isSuccess(result))
+  assert.deepEqual(result.success, {
+    model: "private",
+    messages: [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Checking" }],
+        tool_calls: [
+          { id: "call_1", type: "function", function: { name: "lookup", arguments: `{"q":1}` } },
+          { id: "call_2", type: "function", function: { name: "log", arguments: "{}" } },
+        ],
+      },
+      { role: "tool", tool_call_id: "call_1", content: [{ type: "text", text: "done" }] },
+      { role: "assistant", content: null, tool_calls: [{ id: "call_3", type: "function", function: { name: "finish", arguments: "{}" } }] },
+    ],
+    stream: true,
+    stream_options: { include_usage: true },
+    tools: [{ type: "function", function: { name: "lookup", description: "Look up a value", parameters: { type: "object" }, strict: false } }],
+  })
+  assert.deepEqual(request.input, before)
+})
+
+test("native parsing returns canonical request and ingress stream facts together", () => {
+  const result = parseRequest({ model: "private", messages: [{ role: "user", content: "Hi" }], stream: true, stream_options: { include_usage: true, include_obfuscation: false } })
+  assert.ok(Result.isSuccess(result))
+  assert.deepEqual(result.success.ingress, { stream: true, hasStreamOptions: true, includeUsage: true })
+  assert.deepEqual(result.success.request, {
+    model: "private",
+    input: [{ type: "message", role: "user", content: "Hi" }],
+    stream: true,
+    stream_options: { include_obfuscation: false },
+  })
+  const projected = toResponseRequest({ model: "private", messages: [{ role: "user", content: "Hi" }], stream: true, stream_options: { include_usage: true, include_obfuscation: false } })
+  assert.ok(Result.isSuccess(projected))
+  assert.deepEqual(projected.success, result.success.request)
 })

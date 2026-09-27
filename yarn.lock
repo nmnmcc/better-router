@@ -57,20 +57,6 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@better-router/example-chat-completions-gateway@workspace:examples/chat-completions-gateway":
-  version: 0.0.0-use.local
-  resolution: "@better-router/example-chat-completions-gateway@workspace:examples/chat-completions-gateway"
-  dependencies:
-    "@better-router/core": "workspace:*"
-    "@better-router/plugin-openai-chat-completions": "workspace:*"
-    "@better-router/plugin-openai-responses": "workspace:*"
-    "@effect/platform-node": "npm:4.0.0-rc.117"
-    "@types/node": "npm:^24.0.0"
-    effect: "npm:4.0.0-rc.117"
-    tsx: "npm:^4.23.15"
-  languageName: unknown
-  linkType: soft
-
 "@better-router/example-matrix-anthropic-to-anthropic@workspace:examples/matrix/anthropic-to-anthropic":
   version: 0.0.0-use.local
   resolution: "@better-router/example-matrix-anthropic-to-anthropic@workspace:examples/matrix/anthropic-to-anthropic"

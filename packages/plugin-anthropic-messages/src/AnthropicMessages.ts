@@ -42,7 +42,48 @@ const isError = Schema.is(Schema.Struct({ kind: Schema.String, message: Schema.S
 const rejected = (field: string): ProviderError => fail("unsupported", `Cannot map ${field} to Anthropic Messages`)
 const malformed = (field: string): ProviderError => fail("invalid_request", `Invalid ${field}`)
 
-function image(url: string, path: string): Result.Result<Record<string, unknown>, ProviderError> {
+type AnthropicTextBlock = {
+  readonly type: "text"
+  readonly text: string
+}
+
+type AnthropicImageBlock = {
+  readonly type: "image"
+  readonly source: {
+    readonly type: "url" | "base64"
+    readonly url?: string
+    readonly media_type?: string
+    readonly data?: string
+  }
+}
+
+type AnthropicToolUseBlock = {
+  readonly type: "tool_use"
+  readonly id: string
+  readonly name: string
+  readonly input: Readonly<Record<string, unknown>>
+}
+
+type AnthropicToolResultBlock = {
+  readonly type: "tool_result"
+  readonly tool_use_id: string
+  readonly content: string | readonly (AnthropicTextBlock | AnthropicImageBlock)[]
+}
+
+type AnthropicBlock = AnthropicTextBlock | AnthropicImageBlock | AnthropicToolUseBlock | AnthropicToolResultBlock
+
+type MessageContent = { readonly kind: "string"; readonly value: string } | { readonly kind: "blocks"; readonly value: readonly AnthropicBlock[] }
+
+type Message = { readonly role: "user" | "assistant"; readonly content: MessageContent }
+type State = { readonly system: Option.Option<string>; readonly messages: readonly Message[] }
+
+type AnthropicTool = {
+  readonly name: string
+  readonly description: string
+  readonly input_schema: Readonly<Record<string, unknown>>
+}
+
+function image(url: string, path: string): Result.Result<AnthropicImageBlock, ProviderError> {
   if (url.startsWith("data:")) {
     const match = /^data:(image\/(?:png|jpeg|gif|webp));base64,([a-zA-Z0-9+/=]+)$/.exec(url)
     return match ? Result.succeed({ type: "image", source: { type: "base64", media_type: match[1], data: match[2] } }) : Result.fail(malformed(path))
@@ -50,14 +91,13 @@ function image(url: string, path: string): Result.Result<Record<string, unknown>
   return /^https?:\/\/\S+$/.test(url) ? Result.succeed({ type: "image", source: { type: "url", url } }) : Result.fail(malformed(path))
 }
 
-type Message = { readonly role: "user" | "assistant"; readonly content: string | readonly Record<string, unknown>[] }
-type State = { readonly system: Option.Option<string>; readonly messages: readonly Message[] }
-
-const append = (messages: readonly Message[], role: Message["role"], block: Record<string, unknown>): readonly Message[] => {
+const append = (messages: readonly Message[], role: Message["role"], block: AnthropicBlock): readonly Message[] => {
   const last = messages.at(-1)
-  const content = last?.role === role ? (typeof last.content === "string" ? [{ type: "text", text: last.content }] : last.content) : []
-  return last?.role === role ? [...messages.slice(0, -1), { ...last, content: [...content, block] }] : [...messages, { role, content: [block] }]
+  const content = last?.role === role ? (last.content.kind === "string" ? [{ type: "text" as const, text: last.content.value }] : last.content.value) : []
+  return last?.role === role ? [...messages.slice(0, -1), { ...last, content: { kind: "blocks", value: [...content, block] } }] : [...messages, { role, content: { kind: "blocks", value: [block] } }]
 }
+
+const wireMessage = (message: Message) => ({ role: message.role, content: message.content.value })
 
 /** Convert portable OpenResponses input into a stateless Anthropic Messages request. */
 export function toMessagesRequest(request: ModelRequest, defaultMaxTokens: number): Result.Result<Record<string, unknown>, ProviderError> {
@@ -85,27 +125,30 @@ export function toMessagesRequest(request: ModelRequest, defaultMaxTokens: numbe
             }
             if (item.role !== "user" && item.role !== "assistant") return yield* Result.fail(rejected(`${path}.role`))
             if (typeof item.content !== "string" && !Array.isArray(item.content)) return yield* Result.fail(malformed(`${path}.content`))
-            const content =
+            const content: MessageContent =
               typeof item.content === "string"
-                ? item.content
-                : yield* item.content.reduce<Result.Result<readonly Record<string, unknown>[], ProviderError>>(
-                    (prior, part, partIndex) =>
-                      Result.gen(function* () {
-                        const entries = yield* prior
-                        const field = `${path}.content[${partIndex}]`
-                        if (part.type === "input_text" || part.type === "output_text") {
-                          if (part.type === "output_text" && (part.annotations?.length ?? 0)) return yield* Result.fail(rejected(`${field}.annotations`))
-                          return [...entries, { type: "text", text: part.text }]
-                        }
-                        if (part.type === "input_image" && item.role === "user") {
-                          if (part.detail && part.detail !== "auto") return yield* Result.fail(rejected(`${field}.detail`))
-                          if (!part.image_url) return yield* Result.fail(malformed(`${field}.image_url`))
-                          return [...entries, yield* image(part.image_url, field)]
-                        }
-                        return yield* Result.fail(rejected(field))
-                      }),
-                    Result.succeed([]),
-                  )
+                ? { kind: "string", value: item.content }
+                : {
+                    kind: "blocks",
+                    value: yield* item.content.reduce<Result.Result<readonly AnthropicBlock[], ProviderError>>(
+                      (prior, part, partIndex) =>
+                        Result.gen(function* () {
+                          const entries = yield* prior
+                          const field = `${path}.content[${partIndex}]`
+                          if (part.type === "input_text" || part.type === "output_text") {
+                            if (part.type === "output_text" && (part.annotations?.length ?? 0)) return yield* Result.fail(rejected(`${field}.annotations`))
+                            return [...entries, { type: "text", text: part.text }]
+                          }
+                          if (part.type === "input_image" && item.role === "user") {
+                            if (part.detail && part.detail !== "auto") return yield* Result.fail(rejected(`${field}.detail`))
+                            if (!part.image_url) return yield* Result.fail(malformed(`${field}.image_url`))
+                            return [...entries, yield* image(part.image_url, field)]
+                          }
+                          return yield* Result.fail(rejected(field))
+                        }),
+                      Result.succeed([]),
+                    ),
+                  }
             return { ...state, messages: [...state.messages, { role: item.role, content }] }
           }
           if (item.type === "function_call" && "arguments" in item && "call_id" in item && "name" in item) {
@@ -116,10 +159,10 @@ export function toMessagesRequest(request: ModelRequest, defaultMaxTokens: numbe
           if (item.type === "function_call_output" && "output" in item && "call_id" in item) {
             if (item.status && item.status !== "completed") return yield* Result.fail(rejected(`${path}.status`))
             if (typeof item.output !== "string" && !Array.isArray(item.output)) return yield* Result.fail(malformed(`${path}.output`))
-            const content =
+            const content: string | readonly (AnthropicTextBlock | AnthropicImageBlock)[] =
               typeof item.output === "string"
                 ? item.output
-                : yield* item.output.reduce<Result.Result<readonly Record<string, unknown>[], ProviderError>>(
+                : yield* item.output.reduce<Result.Result<readonly (AnthropicTextBlock | AnthropicImageBlock)[], ProviderError>>(
                     (prior, part, partIndex) =>
                       Result.gen(function* () {
                         const entries = yield* prior
@@ -139,7 +182,7 @@ export function toMessagesRequest(request: ModelRequest, defaultMaxTokens: numbe
         }),
       Result.succeed({ system: Option.fromNullishOr(request.instructions), messages: [] }),
     )
-    const tools = yield* (request.tools ?? []).reduce<Result.Result<readonly Record<string, unknown>[], ProviderError>>(
+    const tools = yield* (request.tools ?? []).reduce<Result.Result<readonly AnthropicTool[], ProviderError>>(
       (previous, tool, index) =>
         Result.gen(function* () {
           const entries = yield* previous
@@ -160,7 +203,7 @@ export function toMessagesRequest(request: ModelRequest, defaultMaxTokens: numbe
     return {
       model: request.model,
       max_tokens: max,
-      messages: converted.messages,
+      messages: converted.messages.map(wireMessage),
       stream: true,
       ...Option.match(converted.system, { onNone: () => ({}), onSome: (system) => ({ system }) }),
       ...(request.tools ? { tools } : {}),

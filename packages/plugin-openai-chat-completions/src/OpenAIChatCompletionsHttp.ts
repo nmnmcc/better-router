@@ -9,7 +9,7 @@ import type { ModelEvent, ModelResponse } from "@better-router/core/Model"
 import { Event, Response } from "@better-router/core/ModelSchema"
 import { RouterError } from "@better-router/core/Router"
 import type { Router } from "@better-router/core/Router"
-import { decodeRequest, toResponseRequest } from "./OpenAIChatCompletions.js"
+import { parseRequest } from "./OpenAIChatCompletions.js"
 
 export interface OpenAIChatCompletionsHttpOptions {
   readonly gatewayKey: Redacted.Redacted<string>
@@ -243,13 +243,13 @@ function onError(error: unknown): HttpServerResponse.HttpServerResponse {
 const handle = (router: Router, request: HttpServerRequest.HttpServerRequest, key: Redacted.Redacted<string>) =>
   Effect.gen(function* () {
     const value = yield* readJson(request, request.headers.authorization === "Bearer " + Redacted.value(key))
-    const native = yield* Effect.fromResult(decodeRequest(value))
-    if (native.stream_options && native.stream !== true) return errorResponse(400, "Invalid stream_options", "invalid_request_error")
-    const converted = yield* Effect.fromResult(toResponseRequest(value))
+    const parsed = yield* Effect.fromResult(parseRequest(value))
+    if (parsed.ingress.hasStreamOptions && !parsed.ingress.stream) return errorResponse(400, "Invalid stream_options", "invalid_request_error")
+    const converted = parsed.request
     const invocation = { ...converted, store: converted.store ?? false }
     if (converted.stream) {
       const source = yield* router.open(invocation)
-      return HttpServerResponse.stream(chatFrames(source, converted.model, native.stream_options?.include_usage ?? false).pipe(Stream.encodeText), {
+      return HttpServerResponse.stream(chatFrames(source, converted.model, parsed.ingress.includeUsage).pipe(Stream.encodeText), {
         headers: { "cache-control": "no-cache", "x-accel-buffering": "no" },
         contentType: "text/event-stream; charset=utf-8",
       })

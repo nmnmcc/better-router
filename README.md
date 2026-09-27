@@ -1,6 +1,6 @@
 # Better Router
 
-Effect-based, type-first LLM router workspace. Chat Completions, OpenAI Responses and Anthropic Messages can each serve HTTP requests and execute an upstream deployment; the original Chat-to-Responses gateway remains runnable.
+Effect-based, type-first LLM router workspace. Chat Completions, OpenAI Responses and Anthropic Messages can each serve HTTP requests and execute an upstream deployment.
 
 The application is configured once with model routes and a list of declarative plugins. The same configured router serves in-process SDK calls and, when plugins contribute HTTP endpoints, a hosted HTTP application. There is no gateway plugin or imperative plugin registry.
 
@@ -19,16 +19,15 @@ The canonical request, event stream, and full response follow [OpenResponses 202
 
 All three ingresses convert to the OpenResponses request IR. `Router.make` validates and composes deployments, routing policies, transforms, and HTTP fragments. Each deployment reads an upstream SSE stream through Effect `HttpClient`, even when the caller requested JSON. See [Architecture](docs/architecture.md) for the supported portable subset and explicit rejections.
 
-Build the library dependency and run the TypeScript example workspace with `tsx`, using a private upstream key and a separate key for clients:
+The nine protocol-matrix examples are runnable TypeScript workspaces. Build the library dependencies, then follow [the matrix example instructions](examples/matrix/README.md) to start a selected source-to-target combination:
 
 ```sh
 devenv shell -- yarn build
-OPENAI_API_KEY=your-upstream-key GATEWAY_API_KEY=your-client-key OPENAI_MODEL=your-responses-model devenv shell -- yarn workspace @better-router/example-chat-completions-gateway start
+GATEWAY_API_KEY=client OPENAI_API_KEY=provider OPENAI_MODEL=gpt-model \
+  devenv shell -- yarn workspace @better-router/example-matrix-chat-to-responses start
 ```
 
-It listens on `127.0.0.1:8787` at `POST /v1/chat/completions`. Clients send `Authorization: Bearer your-client-key` and a Chat Completions JSON body. Optional `GATEWAY_MODEL` selects a public alias, `GATEWAY_PORT` / `GATEWAY_HOST` configure the listener, and `OPENAI_RESPONSES_URL` selects a trusted full upstream Responses URL. See [protocol adapters](docs/architecture.md#protocol-adapters).
-
-Library packages build with tsdown to ESM-only `.mjs` entries, `.d.mts` declarations, and source maps. Root and PascalCase subpath exports resolve to `dist/`; the example package runs TypeScript directly with `tsx` and participates in project-reference type checking. TypeScript project references write intermediate declarations to ignored `.types/` directories. Yarn 4 manages the workspace.
+Library packages build with tsdown to ESM-only `.mjs` entries, `.d.mts` declarations, and source maps. Root and PascalCase subpath exports resolve to `dist/`; the matrix examples run TypeScript directly with `tsx` and participate in project-reference type checking. TypeScript project references write intermediate declarations to ignored `.types/` directories. Yarn 4 manages the workspace.
 
 ```sh
 devenv shell -- yarn install --immutable
@@ -38,4 +37,4 @@ devenv shell -- yarn build
 
 Run `devenv shell -- treefmt` to format project files, or `devenv shell -- treefmt --ci` to fail if formatting changes are needed (`--ci` also writes those changes). The configuration excludes vendored `references/` projects and lockfiles.
 
-Runtime and type contracts live beside each package in `test/` and `typetest/`; cross-package type checks live in the root `typetest/`, and the gateway host test lives with its example. See [Testing](docs/testing.md) for conventions and focused commands. `devenv shell -- yarn check` builds and runs all type and runtime tests without a live provider key; `devenv shell -- yarn test:coverage` generates a local report.
+Runtime and type contracts live beside each package in `test/` and `typetest/`; cross-package type checks live in the root `typetest/`. See [Testing](docs/testing.md) for conventions and focused commands. `devenv shell -- yarn check` builds and runs all type and runtime tests without a live provider key; `devenv shell -- yarn test:coverage` generates a local report.
