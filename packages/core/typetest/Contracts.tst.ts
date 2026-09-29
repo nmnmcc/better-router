@@ -178,6 +178,15 @@ describe("router inference", () => {
 		Router.make({ plugins: [plugin] })({
 			routes: [{ model: "dynamic", deployments: [runtimeId] }],
 		})
+		const configure = Router.make({ plugins: [plugin] })
+		type StagedOptions = Parameters<typeof configure>[0]
+		expect<StagedOptions["routes"][number]["deployments"][number]>().type.toBe<
+			"primary" | (string & {})
+		>()
+		const emptyOptions: Router.RouterOptions<readonly [typeof plugin]> = {
+			routes: [{ model: "chat", deployments: [] }],
+		}
+		expect(emptyOptions.routes[0].deployments).type.toBe<readonly "primary"[]>()
 		Router.make({
 			plugins: [plugin],
 		})({

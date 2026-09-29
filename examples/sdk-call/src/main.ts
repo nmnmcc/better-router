@@ -2,7 +2,7 @@ import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
 import { Execution, Router } from "@better-router/core"
 import { OpenAIResponses, OpenAIResponsesPlugin } from "@better-router/plugin-openai-responses"
-import { Config, Effect, Match, Schema } from "effect"
+import { Config, Effect, Match } from "effect"
 
 const settings = Config.all({
 	apiKey: Config.Redacted("OPENAI_API_KEY"),
@@ -13,15 +13,8 @@ const settings = Config.all({
 	),
 })
 
-const Configuration = Schema.Struct({
-	apiKey: Schema.Redacted(Schema.NonEmptyString),
-	upstreamModel: Schema.NonEmptyString,
-	publicModel: Schema.NonEmptyString,
-	url: Schema.URL,
-})
-
 const program = Effect.gen(function* () {
-	const config = yield* settings.pipe(Effect.flatMap(Schema.decodeUnknownEffect(Configuration)))
+	const config = yield* settings
 	const deployment = yield* Effect.fromResult(
 		OpenAIResponses.make({
 			id: "openai-sdk",

@@ -177,47 +177,56 @@ type InvalidPlugin<Plugin, Plugins extends readonly RouterPlugin<string, unknown
 type PluginValidation<Plugins extends readonly RouterPlugin<string, unknown>[]> =
 	InvalidPlugin<Plugins[number], Plugins> extends never ? unknown : never
 
-type RouteValidation<Routes extends readonly ModelRoute[]> =
-	DuplicateRouteModels<Routes> extends never ? unknown : never
+/** Keep literal completions while allowing IDs supplied at runtime. */
+type DynamicString = string & {}
 
-type RouteReference<Actual extends string, Declared extends string> = string extends Actual
-	? string
-	: Actual extends Declared
-		? Actual
-		: never
-
-type RoutePolicyReference<Actual extends string, Declared extends string> = RouteReference<
-	Actual,
-	Declared
+type RouterRoute<Plugins extends readonly RouterPlugin<string, unknown>[]> = ModelRoute<
+	PluginDeploymentIds<Plugins> | DynamicString,
+	PluginPolicyIds<Plugins> | DynamicString
 >
 
-type RouteDeployments<Actual extends readonly string[], Declared extends string> = {
-	readonly [Index in keyof Actual]: Actual[Index] extends string
-		? RouteReference<Actual[Index], Declared>
-		: Actual[Index]
-}
+type InvalidRouteReference<Actual extends string, Declared extends string> = string extends Actual
+	? never
+	: Exclude<Actual, Declared>
 
-type RouteConstraint<Route, Deployments extends string, Policies extends string> = Route extends {
-	readonly model: infer Model extends string
-	readonly deployments: infer DeploymentIds extends readonly string[]
+type InvalidRouteDeployments<Actual extends readonly string[], Declared extends string> = {
+	readonly [Index in keyof Actual]: Actual[Index] extends string
+		? InvalidRouteReference<Actual[Index], Declared>
+		: never
+}[number]
+
+type InvalidRoutePolicy<Route, Declared extends string> = Route extends {
+	readonly policy: infer Policy extends string
 }
-	? ModelRoute<
-			RouteReference<DeploymentIds[number], Deployments>,
-			RoutePolicyReference<
-				Route extends { readonly policy?: infer Policy extends string } ? Policy : never,
-				Policies
-			>,
-			Model
-		> & { readonly deployments: RouteDeployments<DeploymentIds, Deployments> }
+	? InvalidRouteReference<Policy, Declared>
 	: never
 
-type RouteConstraints<
-	Routes extends readonly unknown[],
+type InvalidRouteReferences<
+	Route,
 	Deployments extends string,
 	Policies extends string,
-> = {
-	[Key in keyof Routes]: RouteConstraint<Routes[Key], Deployments, Policies>
-}
+> = Route extends { readonly deployments: infer Actual extends readonly string[] }
+	? InvalidRouteDeployments<Actual, Deployments> | InvalidRoutePolicy<Route, Policies>
+	: never
+
+type RouteValidation<
+	Routes extends readonly ModelRoute[],
+	Deployments extends string,
+	Policies extends string,
+> =
+	DuplicateRouteModels<Routes> extends never
+		? [
+				{
+					[Key in keyof Routes]: InvalidRouteReferences<
+						Routes[Key],
+						Deployments,
+						Policies
+					>
+				}[number],
+			] extends [never]
+			? unknown
+			: never
+		: never
 
 export interface RouterPluginOptions<Plugins extends readonly RouterPlugin<string, unknown>[]> {
 	readonly plugins: Plugins & PluginValidation<Plugins>
@@ -225,14 +234,13 @@ export interface RouterPluginOptions<Plugins extends readonly RouterPlugin<strin
 
 export interface RouterOptions<
 	Plugins extends readonly RouterPlugin<string, unknown>[],
-	Routes extends readonly ModelRoute[] = readonly ModelRoute<
+	Routes extends readonly RouterRoute<Plugins>[] = readonly ModelRoute<
 		PluginDeploymentIds<Plugins>,
 		PluginPolicyIds<Plugins>
 	>[],
 > {
 	readonly routes: Routes &
-		RouteValidation<Routes> &
-		RouteConstraints<Routes, PluginDeploymentIds<Plugins>, PluginPolicyIds<Plugins>>
+		RouteValidation<Routes, PluginDeploymentIds<Plugins>, PluginPolicyIds<Plugins>>
 }
 
 type HttpGroups<Plugin> = Plugin extends {
@@ -652,20 +660,20 @@ const makeConfigured = <
 /** Fix plugin declarations before configuring routes for SDK calls and HTTP serving. */
 export function make<const Plugins extends readonly RouterPlugin<string, unknown>[]>(
 	options: RouterPluginOptions<Plugins>,
-): <const Routes extends readonly ModelRoute[] = readonly ModelRoute[]>(
+): <const Routes extends readonly RouterRoute<Plugins>[] = readonly RouterRoute<Plugins>[]>(
 	options: RouterOptions<Plugins, Routes>,
 ) => RouterEffect<Plugins> {
-	return <const Routes extends readonly ModelRoute[]>(
+	return <const Routes extends readonly RouterRoute<Plugins>[]>(
 		routeOptions: RouterOptions<Plugins, Routes>,
 	) => makeConfigured<Plugins, Routes>(options.plugins, routeOptions.routes)
 }
 
 export function layer<const Plugins extends readonly RouterPlugin<string, unknown>[]>(
 	options: RouterPluginOptions<Plugins>,
-): <const Routes extends readonly ModelRoute[] = readonly ModelRoute[]>(
+): <const Routes extends readonly RouterRoute<Plugins>[] = readonly RouterRoute<Plugins>[]>(
 	options: RouterOptions<Plugins, Routes>,
 ) => Layer.Layer<RouterRuntime, SetupError, Scope.Scope | ExternalPluginRequirements<Plugins>> {
-	return <const Routes extends readonly ModelRoute[]>(
+	return <const Routes extends readonly RouterRoute<Plugins>[]>(
 		routeOptions: RouterOptions<Plugins, Routes>,
 	) =>
 		Layer.effect(

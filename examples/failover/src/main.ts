@@ -9,7 +9,7 @@ import {
 } from "@better-router/plugin-anthropic-messages"
 import { OpenAIChatCompletionsPlugin } from "@better-router/plugin-openai-chat-completions"
 import { OpenAIResponses, OpenAIResponsesPlugin } from "@better-router/plugin-openai-responses"
-import { Config, Effect, Layer, Schema } from "effect"
+import { Config, Effect, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 
 const settings = Config.all({
@@ -30,23 +30,9 @@ const settings = Config.all({
 	port: Config.Int("GATEWAY_PORT").pipe(Config.withDefault(8787)),
 })
 
-const HostConfig = Schema.Struct({
-	gatewayKey: Schema.Redacted(Schema.NonEmptyString),
-	openAIKey: Schema.Redacted(Schema.NonEmptyString),
-	openAIModel: Schema.NonEmptyString,
-	openAIUrl: Schema.URL,
-	anthropicKey: Schema.Redacted(Schema.NonEmptyString),
-	anthropicModel: Schema.NonEmptyString,
-	anthropicUrl: Schema.URL,
-	anthropicMaxTokens: Schema.Int.check(Schema.isGreaterThanOrEqualTo(16)),
-	publicModel: Schema.NonEmptyString,
-	host: Schema.NonEmptyString,
-	port: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })),
-})
-
 const server = Layer.unwrap(
 	Effect.gen(function* () {
-		const config = yield* settings.pipe(Effect.flatMap(Schema.decodeUnknownEffect(HostConfig)))
+		const config = yield* settings
 		const primary = yield* Effect.fromResult(
 			OpenAIResponses.make({
 				id: "openai-primary",
