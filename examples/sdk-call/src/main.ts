@@ -32,6 +32,7 @@ const program = Effect.gen(function* () {
 	)
 	const router = yield* Router.make({
 		plugins: [OpenAIResponsesPlugin.make({ deployments: [deployment] })] as const,
+	})({
 		routes: [{ model: config.publicModel, deployments: [deployment.id] }],
 	})
 	const execution = yield* router.invoke({

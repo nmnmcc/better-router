@@ -100,6 +100,7 @@ test.effect("Messages ingress authenticates, converts input, and emits native JS
 						AnthropicMessagesPlugin.make({ gatewayKey: Redacted.make("client") }),
 						{ id: "local", deployments: [local] },
 					],
+				})({
 					routes: [{ model: "public", deployments: ["local"] }],
 				}).pipe(Effect.map((router) => router.http.routes)),
 			).pipe(

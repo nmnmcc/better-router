@@ -121,7 +121,7 @@ describe("router inference", () => {
 			readonly record: (message: string) => void
 		}
 		const audit: Plugin.RouterPlugin<"audit", AuditLog> = { id: "audit" }
-		const router = Router.make({ plugins: [audit], routes: [] })
+		const router = Router.make({ plugins: [audit] })({ routes: [] })
 		expect(router).type.toBe<
 			Effect.Effect<
 				Router.Router<Router.ComposedHttpApi<readonly [typeof audit]>>,
@@ -171,17 +171,22 @@ describe("router inference", () => {
 		expect<Plugin.PluginMiddlewareIds<typeof plugin>>().type.toBe<"audit">()
 		Router.make({
 			plugins: [plugin],
+		})({
 			routes: [{ model: "chat", deployments: ["primary"], policy: "balanced" }],
 		})
 		const runtimeId: string = "primary"
-		Router.make({ plugins: [plugin], routes: [{ model: "dynamic", deployments: [runtimeId] }] })
+		Router.make({ plugins: [plugin] })({
+			routes: [{ model: "dynamic", deployments: [runtimeId] }],
+		})
 		Router.make({
 			plugins: [plugin],
+		})({
 			// @ts-expect-error!
 			routes: [{ model: "mixed", deployments: ["misspelled", runtimeId] }],
 		})
 		Router.make({
 			plugins: [plugin],
+		})({
 			// @ts-expect-error!
 			routes: [{ model: "chat", deployments: ["primary"], policy: "missing" }],
 		})

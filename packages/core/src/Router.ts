@@ -219,6 +219,10 @@ type RouteConstraints<
 	[Key in keyof Routes]: RouteConstraint<Routes[Key], Deployments, Policies>
 }
 
+export interface RouterPluginOptions<Plugins extends readonly RouterPlugin<string, unknown>[]> {
+	readonly plugins: Plugins & PluginValidation<Plugins>
+}
+
 export interface RouterOptions<
 	Plugins extends readonly RouterPlugin<string, unknown>[],
 	Routes extends readonly ModelRoute[] = readonly ModelRoute<
@@ -228,12 +232,7 @@ export interface RouterOptions<
 > {
 	readonly routes: Routes &
 		RouteValidation<Routes> &
-		RouteConstraints<
-			Routes,
-			NoInfer<PluginDeploymentIds<Plugins>>,
-			NoInfer<PluginPolicyIds<Plugins>>
-		>
-	readonly plugins: Plugins & PluginValidation<Plugins>
+		RouteConstraints<Routes, PluginDeploymentIds<Plugins>, PluginPolicyIds<Plugins>>
 }
 
 type HttpGroups<Plugin> = Plugin extends {
@@ -250,31 +249,33 @@ type ExternalPluginRequirements<Plugins extends readonly RouterPlugin<string, un
 	Registry.Registry
 >
 
-/** Compose declarations once, then keep the scope open for SDK calls and HTTP serving. */
-export function make<
-	const Plugins extends readonly RouterPlugin<string, unknown>[],
-	const Routes extends readonly ModelRoute[] = readonly ModelRoute[],
->(
-	options: RouterOptions<Plugins, Routes>,
-): Effect.Effect<
+type RouterEffect<Plugins extends readonly RouterPlugin<string, unknown>[]> = Effect.Effect<
 	Router<ComposedHttpApi<Plugins>>,
 	SetupError,
 	Scope.Scope | ExternalPluginRequirements<Plugins>
-> {
+>
+
+const makeConfigured = <
+	const Plugins extends readonly RouterPlugin<string, unknown>[],
+	const Routes extends readonly ModelRoute[],
+>(
+	plugins: Plugins,
+	routes: Routes,
+): RouterEffect<Plugins> => {
 	const program = Effect.gen(function* () {
 		const environment = yield* Effect.context<
 			Scope.Scope | ExternalPluginRequirements<Plugins>
 		>()
-		const plugins = options.plugins.reduce<Result.Result<Registry.Snapshot, SetupError>>(
+		const registeredPlugins = plugins.reduce<Result.Result<Registry.Snapshot, SetupError>>(
 			(current, plugin) =>
 				Result.flatMap(current, (state) => Registry.registerPlugin(state, plugin)),
 			Result.succeed(Registry.empty()),
 		)
 		const registry = yield* Effect.fromResult(
-			options.routes.reduce<Result.Result<Registry.Snapshot, SetupError>>(
+			routes.reduce<Result.Result<Registry.Snapshot, SetupError>>(
 				(current, route) =>
 					Result.flatMap(current, (state) => Registry.addRoute(state, route)),
-				plugins,
+				registeredPlugins,
 			),
 		)
 		yield* Effect.fromResult(Registry.validatePipelines(registry))
@@ -619,7 +620,7 @@ export function make<
 				api: registry.api as unknown as ComposedHttpApi<Plugins>,
 				get routes() {
 					const contextLayer = Layer.succeedContext(runtimeEnvironment)
-					return options.plugins.reduce<Layer.Layer<never, never, HttpHostServices>>(
+					return plugins.reduce<Layer.Layer<never, never, HttpHostServices>>(
 						(current, plugin) =>
 							plugin.http
 								? (Layer.merge(
@@ -632,7 +633,7 @@ export function make<
 				},
 			},
 		}
-		yield* Effect.forEach(options.plugins, (plugin) =>
+		yield* Effect.forEach(plugins, (plugin) =>
 			plugin.start
 				? plugin.start(router).pipe(
 						Effect.provideContext(runtimeEnvironment),
@@ -645,17 +646,30 @@ export function make<
 		return router
 	})
 	// Plugin declarations are erased in the registry; their requirements were captured above.
-	return program as Effect.Effect<
-		Router<ComposedHttpApi<Plugins>>,
-		SetupError,
-		Scope.Scope | ExternalPluginRequirements<Plugins>
-	>
+	return program as RouterEffect<Plugins>
 }
 
-export const layer = <
-	const Plugins extends readonly RouterPlugin<string, unknown>[],
-	const Routes extends readonly ModelRoute[] = readonly ModelRoute[],
->(
+/** Fix plugin declarations before configuring routes for SDK calls and HTTP serving. */
+export function make<const Plugins extends readonly RouterPlugin<string, unknown>[]>(
+	options: RouterPluginOptions<Plugins>,
+): <const Routes extends readonly ModelRoute[] = readonly ModelRoute[]>(
 	options: RouterOptions<Plugins, Routes>,
-): Layer.Layer<RouterRuntime, SetupError, Scope.Scope | ExternalPluginRequirements<Plugins>> =>
-	Layer.effect(RouterRuntime, make(options))
+) => RouterEffect<Plugins> {
+	return <const Routes extends readonly ModelRoute[]>(
+		routeOptions: RouterOptions<Plugins, Routes>,
+	) => makeConfigured<Plugins, Routes>(options.plugins, routeOptions.routes)
+}
+
+export function layer<const Plugins extends readonly RouterPlugin<string, unknown>[]>(
+	options: RouterPluginOptions<Plugins>,
+): <const Routes extends readonly ModelRoute[] = readonly ModelRoute[]>(
+	options: RouterOptions<Plugins, Routes>,
+) => Layer.Layer<RouterRuntime, SetupError, Scope.Scope | ExternalPluginRequirements<Plugins>> {
+	return <const Routes extends readonly ModelRoute[]>(
+		routeOptions: RouterOptions<Plugins, Routes>,
+	) =>
+		Layer.effect(
+			RouterRuntime,
+			makeConfigured<Plugins, Routes>(options.plugins, routeOptions.routes),
+		)
+}

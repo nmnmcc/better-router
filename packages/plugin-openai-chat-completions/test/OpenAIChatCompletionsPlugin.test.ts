@@ -90,6 +90,7 @@ test.effect("Chat Completions ingress runs against a non-OpenAI deployment", () 
 						OpenAIChatCompletionsPlugin.make({ gatewayKey: Redacted.make("client") }),
 						localPlugin,
 					] as const,
+				})({
 					routes: [{ model: "chat", deployments: ["local"] }],
 				}).pipe(Effect.map((router) => router.http.routes)),
 			).pipe(

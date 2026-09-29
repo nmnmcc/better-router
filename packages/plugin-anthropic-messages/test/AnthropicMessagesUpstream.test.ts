@@ -94,6 +94,7 @@ test.effect("Anthropic deployment streams native Messages events into a complete
 			assert.ok(Result.isSuccess(deployment))
 			const result = yield* makeRouter({
 				plugins: [AnthropicMessagesPlugin.make({ deployments: [deployment.success] })],
+			})({
 				routes: [{ model: "public", deployments: ["anthropic-upstream"] }],
 			}).pipe(
 				Effect.flatMap((router) =>

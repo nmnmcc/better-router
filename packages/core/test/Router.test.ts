@@ -3,7 +3,7 @@ import { it as test } from "@effect/vitest"
 import { Deferred, Effect, Fiber, Layer, Ref, Schema, Stream } from "effect"
 import type { Scope } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
-import { make, RouterError } from "@better-router/core/Router"
+import { make as define, RouterError } from "@better-router/core/Router"
 import { SetupError } from "@better-router/core/Plugin"
 import type { RouterPlugin } from "@better-router/core/Plugin"
 import { ProviderError } from "@better-router/core/Deployment"
@@ -41,6 +41,10 @@ const configured = (
 	deployments: readonly Deployment[],
 	extras: Partial<RouterPlugin> = {},
 ): RouterPlugin => ({ id: "test", deployments, ...extras })
+const make = (configuration: {
+	readonly plugins: readonly RouterPlugin[]
+	readonly routes: readonly ModelRoute[]
+}) => define({ plugins: configuration.plugins })({ routes: configuration.routes })
 const options = (
 	plugins: readonly RouterPlugin[],
 	ids: readonly string[],

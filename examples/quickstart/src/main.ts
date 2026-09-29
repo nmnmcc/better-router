@@ -46,6 +46,7 @@ const server = Layer.unwrap(
 		const routes = Layer.unwrap(
 			Router.make({
 				plugins: [chat, responses] as const,
+			})({
 				routes: [{ model: config.publicModel, deployments: [deployment.id] }],
 			}).pipe(Effect.map((router) => router.http.routes)),
 		)

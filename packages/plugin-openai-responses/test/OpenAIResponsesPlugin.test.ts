@@ -90,6 +90,7 @@ test.effect("Responses ingress serves JSON and SSE through a configured deployme
 						}),
 						{ id: "local", deployments: [deployment] },
 					],
+				})({
 					routes: [{ model: "public", deployments: ["local"] }],
 				}).pipe(Effect.map((router) => router.http.routes)),
 			).pipe(
@@ -164,6 +165,7 @@ test.effect("invalid upstream resources return 502 rather than a client parse er
 						OpenAIResponsesPlugin.make({ gatewayKey: Redacted.make("client") }),
 						{ id: "local", deployments: [local] },
 					],
+				})({
 					routes: [{ model: "public", deployments: ["broken"] }],
 				}).pipe(Effect.map((router) => router.http.routes)),
 			).pipe(

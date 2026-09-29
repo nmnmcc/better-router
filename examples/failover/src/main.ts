@@ -70,6 +70,7 @@ const server = Layer.unwrap(
 		const routes = Layer.unwrap(
 			Router.make({
 				plugins: [chat, responses, anthropic] as const,
+			})({
 				routes: [
 					{
 						model: config.publicModel,

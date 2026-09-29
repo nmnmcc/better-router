@@ -17,7 +17,7 @@ Each `Plugin.make` declares an authenticated HTTP ingress, deployments, direct p
 
 The canonical request, event stream, and full response follow [OpenResponses 2026-04-24](https://www.openresponses.org/specification); `yarn generate:openresponses` regenerates the pinned types. See [Architecture](docs/architecture.md) for the proposed interfaces, lifecycle, and routing rules, and [Context](CONTEXT.md) for the terms used here.
 
-Cross-protocol ingresses use a generation projection command. Same-protocol direct pipelines keep the original JSON/SSE body and only replace the routed private model. `Router.make` validates and composes deployments, pipelines, routing policies, middleware, projections, and HTTP fragments. See [Architecture](docs/architecture.md) for the supported portable subset and explicit rejections.
+Cross-protocol ingresses use a generation projection command. Same-protocol direct pipelines keep the original JSON/SSE body and only replace the routed private model. Define a router in two stages: `Router.make({ plugins })({ routes })` captures plugin declarations and their types before routes are written; `Router.layer({ plugins })({ routes })` provides the equivalent Layer constructor. Both forms validate and compose deployments, pipelines, routing policies, middleware, projections, and HTTP fragments. See [Architecture](docs/architecture.md) for the supported portable subset and explicit rejections.
 
 The guided examples are runnable TypeScript workspaces. Build the library dependencies, then follow [the guided example instructions](examples/README.md):
 

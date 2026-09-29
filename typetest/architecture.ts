@@ -91,6 +91,7 @@ void responseGroup
 
 const router = Router.make({
 	plugins,
+})({
 	routes: [{ model: "chat", deployments: ["openai-main", "anthropic-fallback"] }],
 })
 void router
@@ -108,10 +109,11 @@ const invalidDeclaredRoute: DeclaredRoute = {
 void invalidDeclaredRoute
 
 // @ts-expect-error Route deployment IDs must come from the plugin declarations.
-Router.make({ plugins, routes: [{ model: "chat", deployments: ["missing-deployment"] }] })
+Router.make({ plugins })({ routes: [{ model: "chat", deployments: ["missing-deployment"] }] })
 
 Router.make({
 	plugins,
+})({
 	// @ts-expect-error Duplicate literal model aliases are rejected during composition.
 	routes: [
 		{ model: "chat", deployments: ["openai-main"] },
@@ -131,15 +133,18 @@ const policyPlugin = {
 } as const satisfies Plugin.RouterPlugin<"openai-policy">
 Router.make({
 	plugins: [policyPlugin],
+})({
 	routes: [{ model: "chat", deployments: ["openai-main"], policy: "fallback" }],
 })
 Router.make({
 	plugins: [policyPlugin],
+})({
 	// @ts-expect-error Route policy IDs must come from the plugin declarations.
 	routes: [{ model: "chat", deployments: ["openai-main"], policy: "missing-policy" }],
 })
 Router.layer({
 	plugins: [policyPlugin],
+})({
 	// @ts-expect-error Layer construction checks the same route references as make.
 	routes: [{ model: "chat", deployments: ["openai-main"], policy: "missing-policy" }],
 })
@@ -148,6 +153,7 @@ const runtimeDeploymentId: string = "openai-main"
 const runtimePolicyId: string = "fallback"
 Router.make({
 	plugins: [policyPlugin],
+})({
 	routes: [{ model: "dynamic", deployments: [runtimeDeploymentId], policy: runtimePolicyId }],
 })
 
@@ -157,6 +163,7 @@ const dynamicDeployment = {
 }
 Router.make({
 	plugins: [{ id: "dynamic", deployments: [dynamicDeployment] }],
+})({
 	routes: [{ model: "dynamic", deployments: ["unknown-at-compile-time"] }],
 })
 
@@ -174,8 +181,7 @@ const invalidPipelinePlugin = {
 Router.make({
 	// @ts-expect-error Pipeline references must resolve to declared deployments and protocols.
 	plugins: [openai, invalidPipelinePlugin],
-	routes: [],
-})
+})({ routes: [] })
 
 const pipelineFor = <const Source extends string, const Target extends string>(
 	source: Source,
@@ -201,8 +207,7 @@ Router.make({
 			pipelines: [pipelineFor("openai.responses", "openai.responses")],
 		},
 	],
-	routes: [],
-})
+})({ routes: [] })
 Router.make({
 	// @ts-expect-error Pipeline source must be a declared protocol.
 	plugins: [
@@ -213,8 +218,7 @@ Router.make({
 			pipelines: [pipelineFor("undeclared.protocol", "openai.responses")],
 		},
 	],
-	routes: [],
-})
+})({ routes: [] })
 Router.make({
 	// @ts-expect-error Pipeline target must match its deployment protocol.
 	plugins: [
@@ -225,8 +229,7 @@ Router.make({
 			pipelines: [pipelineFor("openai.responses", "undeclared.protocol")],
 		},
 	],
-	routes: [],
-})
+})({ routes: [] })
 
 const invalidProjectionPlugin = {
 	id: "invalid-projection",
@@ -235,8 +238,7 @@ const invalidProjectionPlugin = {
 Router.make({
 	// @ts-expect-error Projection capabilities must be declared or built in.
 	plugins: [invalidProjectionPlugin],
-	routes: [],
-})
+})({ routes: [] })
 
 const invalidCapabilityPlugin = {
 	id: "invalid-capability",
@@ -245,8 +247,7 @@ const invalidCapabilityPlugin = {
 Router.make({
 	// @ts-expect-error Capability projections must resolve to declared protocols.
 	plugins: [invalidCapabilityPlugin],
-	routes: [],
-})
+})({ routes: [] })
 
 const httpOnly: AnthropicMessages.AnthropicMessagesDeployment = anthropic.deployments[0]
 void httpOnly
@@ -340,6 +341,7 @@ const factoryPipelineId: Equal<FactoryPipeline["id"], "openai-http:direct"> = tr
 void factoryPipelineId
 const gatewayRouter = Router.make({
 	plugins: gatewayPlugins,
+})({
 	routes: [{ model: "chat", deployments: ["openai-http"] }],
 })
 void gatewayRouter
@@ -357,15 +359,17 @@ const gatewayRequirement: Equal<
 > = true
 void gatewayRequirement
 
-const chatOnlyRouter = Router.make({ plugins: [chat], routes: [] })
+const chatOnlyRouter = Router.make({ plugins: [chat] })({ routes: [] })
 const chatOnlyRequirement: Equal<
 	EnvironmentOf<typeof chatOnlyRouter>,
 	Scope.Scope | HttpClient.HttpClient
 > = true
 void chatOnlyRequirement
 
-// @ts-expect-error A plugin without deployments cannot satisfy a route deployment reference.
-Router.make({ plugins: [chat], routes: [{ model: "chat", deployments: ["openai-http"] }] })
+Router.make({ plugins: [chat] })({
+	// @ts-expect-error A plugin without deployments cannot satisfy a route deployment reference.
+	routes: [{ model: "chat", deployments: ["openai-http"] }],
+})
 
 // @ts-expect-error The old messages field is not in the OpenResponses request body.
 const legacyRequest: GenerationRequest = { model: "chat", messages: [] }
@@ -406,7 +410,7 @@ interface AuditLog {
 }
 
 const audit: Plugin.RouterPlugin<"audit", AuditLog> = { id: "audit" }
-const withRequirements = Router.make({ plugins: [audit], routes: [] })
+const withRequirements = Router.make({ plugins: [audit] })({ routes: [] })
 void withRequirements
 
 type Equal<A, B> =
@@ -424,6 +428,6 @@ void routerRequirement
 const registryInspector: Plugin.RouterPlugin<"registry-inspector", Registry.Registry> = {
 	id: "registry-inspector",
 }
-const registryRouter = Router.make({ plugins: [registryInspector], routes: [] })
+const registryRouter = Router.make({ plugins: [registryInspector] })({ routes: [] })
 const registryRouterRequirement: Equal<EnvironmentOf<typeof registryRouter>, Scope.Scope> = true
 void registryRouterRequirement

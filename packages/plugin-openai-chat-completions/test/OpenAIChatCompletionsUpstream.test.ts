@@ -78,6 +78,7 @@ test.effect("Chat Completions deployment streams text and usage through the rout
 			)
 			const response = yield* makeRouter({
 				plugins: [OpenAIChatCompletionsPlugin.make({ deployments: [deployment] })],
+			})({
 				routes: [{ model: "public", deployments: ["chat-upstream"] }],
 			}).pipe(
 				Effect.flatMap((router) =>
