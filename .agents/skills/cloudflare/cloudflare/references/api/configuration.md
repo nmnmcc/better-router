@@ -25,7 +25,7 @@ CLOUDFLARE_ACCOUNT_ID=your-account-id
 import "dotenv/config"
 
 const client = new Cloudflare({
-  apiToken: process.env.CLOUDFLARE_API_TOKEN,
+	apiToken: process.env.CLOUDFLARE_API_TOKEN,
 })
 ```
 
@@ -43,10 +43,10 @@ client = Cloudflare(api_token=os.environ["CLOUDFLARE_API_TOKEN"])
 
 ```typescript
 const client = new Cloudflare({
-  apiToken: process.env.CLOUDFLARE_API_TOKEN,
-  timeout: 120000, // 2 min (default 60s), in milliseconds
-  maxRetries: 5, // default 2
-  baseURL: "https://...", // proxy (rare)
+	apiToken: process.env.CLOUDFLARE_API_TOKEN,
+	timeout: 120000, // 2 min (default 60s), in milliseconds
+	maxRetries: 5, // default 2
+	baseURL: "https://...", // proxy (rare)
 })
 
 // Per-request overrides
@@ -101,7 +101,7 @@ client.Zones.Get(ctx, "zone-id", option.WithMaxRetries(0))
 
 ```typescript
 const client = new Cloudflare({
-  timeout: 300000, // 5 minutes
+	timeout: 300000, // 5 minutes
 })
 ```
 

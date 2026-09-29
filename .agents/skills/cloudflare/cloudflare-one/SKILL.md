@@ -93,13 +93,13 @@ Use these to avoid jumping straight to configuration. Ask only the prompts relev
 - Device profiles control connection mode, [split tunnel](https://developers.cloudflare.com/cloudflare-one/team-and-resources/devices/cloudflare-one-client/configure/route-traffic/split-tunnels/) configuration, user permissions (disable, switch lock), auto-reconnect, and captive portal behavior. Profiles are matched by user group or device attributes in precedence order - first match wins, default profile catches the rest.
 - Split tunnel mode is the single most impactful client setting. Choose the mode based on the deployment goal:
 
-  | Goal                                | Mode          | Rationale                                                                                                               |
-  | ----------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------- |
-  | VPN replacement only (private apps) | **Include**   | Route only specified private CIDRs and hostnames through the client. Everything else goes direct. Minimal blast radius. |
-  | SWG only (internet security)        | **Exclude**   | All traffic through the client. Exclude only what breaks (local printers, certificate-pinned apps).                     |
-  | VPN replacement + SWG               | **Exclude**   | All traffic through the client. Most common enterprise configuration.                                                   |
-  | Coexistence with another VPN        | **Include**   | Avoids conflict with the other VPN's tunnel interface and DNS control.                                                  |
-  | DNS filtering only                  | DNS-only mode | Only DNS queries go to Gateway. No traffic proxying.                                                                    |
+    | Goal                                | Mode          | Rationale                                                                                                               |
+    | ----------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------- |
+    | VPN replacement only (private apps) | **Include**   | Route only specified private CIDRs and hostnames through the client. Everything else goes direct. Minimal blast radius. |
+    | SWG only (internet security)        | **Exclude**   | All traffic through the client. Exclude only what breaks (local printers, certificate-pinned apps).                     |
+    | VPN replacement + SWG               | **Exclude**   | All traffic through the client. Most common enterprise configuration.                                                   |
+    | Coexistence with another VPN        | **Include**   | Avoids conflict with the other VPN's tunnel interface and DNS control.                                                  |
+    | DNS filtering only                  | DNS-only mode | Only DNS queries go to Gateway. No traffic proxying.                                                                    |
 
 - Include vs exclude is per-profile, not per-entry. You cannot mix modes in the same profile. Switching modes mid-deployment requires re-evaluating every entry.
 - Split tunnel entries must align with tunnel routes bidirectionally. A CIDR in the include list without a matching tunnel route causes a black hole. A tunnel route without a matching device profile entry means traffic never enters the tunnel.

@@ -9,10 +9,10 @@ Add a Flagship binding to your Wrangler config to access flags via `env.FLAGS`.
 ```jsonc
 // wrangler.jsonc
 {
-  "flagship": {
-    "binding": "FLAGS",
-    "app_id": "<APP_ID>",
-  },
+	"flagship": {
+		"binding": "FLAGS",
+		"app_id": "<APP_ID>",
+	},
 }
 ```
 
@@ -28,16 +28,16 @@ app_id = "<APP_ID>"
 ```jsonc
 // wrangler.jsonc
 {
-  "flagship": [
-    {
-      "binding": "FLAGS",
-      "app_id": "<APP_ID_1>",
-    },
-    {
-      "binding": "EXPERIMENT_FLAGS",
-      "app_id": "<APP_ID_2>",
-    },
-  ],
+	"flagship": [
+		{
+			"binding": "FLAGS",
+			"app_id": "<APP_ID_1>",
+		},
+		{
+			"binding": "EXPERIMENT_FLAGS",
+			"app_id": "<APP_ID_2>",
+		},
+	],
 }
 ```
 
@@ -64,8 +64,8 @@ This creates the `Env` interface with each binding typed as `Flagship`:
 
 ```typescript
 interface Env {
-  FLAGS: Flagship
-  EXPERIMENT_FLAGS: Flagship // if multiple
+	FLAGS: Flagship
+	EXPERIMENT_FLAGS: Flagship // if multiple
 }
 ```
 
@@ -100,11 +100,11 @@ import { OpenFeature } from "@openfeature/server-sdk"
 import { FlagshipServerProvider } from "@cloudflare/flagship"
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    await OpenFeature.setProviderAndWait(new FlagshipServerProvider({ binding: env.FLAGS }))
-    const client = OpenFeature.getClient()
-    // ... evaluate flags
-  },
+	async fetch(request: Request, env: Env): Promise<Response> {
+		await OpenFeature.setProviderAndWait(new FlagshipServerProvider({ binding: env.FLAGS }))
+		const client = OpenFeature.getClient()
+		// ... evaluate flags
+	},
 }
 ```
 
@@ -117,11 +117,11 @@ import { OpenFeature } from "@openfeature/server-sdk"
 import { FlagshipServerProvider } from "@cloudflare/flagship"
 
 await OpenFeature.setProviderAndWait(
-  new FlagshipServerProvider({
-    appId: "<APP_ID>",
-    accountId: "<ACCOUNT_ID>",
-    authToken: "<API_TOKEN>",
-  }),
+	new FlagshipServerProvider({
+		appId: "<APP_ID>",
+		accountId: "<ACCOUNT_ID>",
+		authToken: "<API_TOKEN>",
+	}),
 )
 const client = OpenFeature.getClient()
 ```
@@ -135,12 +135,12 @@ import { OpenFeature } from "@openfeature/web-sdk"
 import { FlagshipClientProvider } from "@cloudflare/flagship"
 
 await OpenFeature.setProviderAndWait(
-  new FlagshipClientProvider({
-    appId: "<APP_ID>",
-    accountId: "<ACCOUNT_ID>",
-    authToken: "<API_TOKEN>",
-    prefetchFlags: ["promo-banner", "dark-mode", "max-uploads"],
-  }),
+	new FlagshipClientProvider({
+		appId: "<APP_ID>",
+		accountId: "<ACCOUNT_ID>",
+		authToken: "<API_TOKEN>",
+		prefetchFlags: ["promo-banner", "dark-mode", "max-uploads"],
+	}),
 )
 await OpenFeature.setContext({ targetingKey: "user-42", plan: "enterprise" })
 const client = OpenFeature.getClient()

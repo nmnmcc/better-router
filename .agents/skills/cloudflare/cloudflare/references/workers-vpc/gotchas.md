@@ -18,12 +18,12 @@ Common pitfalls, limitations, and solutions for TCP Sockets in Cloudflare Worker
 
 ```typescript
 for (let i = 0; i < hosts.length; i += 6) {
-  const batch = hosts.slice(i, i + 6).map((h) => connect({ hostname: h, port: 443 }))
-  await Promise.all(
-    batch.map(async (s) => {
-      /* use */ await s.close()
-    }),
-  )
+	const batch = hosts.slice(i, i + 6).map((h) => connect({ hostname: h, port: 443 }))
+	await Promise.all(
+		batch.map(async (s) => {
+			/* use */ await s.close()
+		}),
+	)
 }
 ```
 
@@ -116,9 +116,9 @@ await Promise.race([socket.opened, timeout])
 ```typescript
 const socket = connect({ hostname: "api.internal", port: 443 })
 try {
-  // Use socket
+	// Use socket
 } finally {
-  await socket.close()
+	await socket.close()
 }
 ```
 

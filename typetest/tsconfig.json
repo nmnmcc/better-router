@@ -1,10 +1,15 @@
 {
-  "extends": "../tsconfig.base.json",
-  "compilerOptions": {
-    "composite": false,
-    "noEmit": true,
-    "rootDir": ".."
-  },
-  "include": ["*.ts", "../packages/*/typetest/**/*.tst.ts"],
-  "references": [{ "path": "../packages/core" }, { "path": "../packages/plugin-openai-chat-completions" }, { "path": "../packages/plugin-openai-responses" }, { "path": "../packages/plugin-anthropic-messages" }]
+	"extends": "../tsconfig.base.json",
+	"compilerOptions": {
+		"composite": false,
+		"noEmit": true,
+		"rootDir": ".."
+	},
+	"include": ["*.ts", "../packages/*/typetest/**/*.tst.ts"],
+	"references": [
+		{ "path": "../packages/core" },
+		{ "path": "../packages/plugin-openai-chat-completions" },
+		{ "path": "../packages/plugin-openai-responses" },
+		{ "path": "../packages/plugin-anthropic-messages" }
+	]
 }

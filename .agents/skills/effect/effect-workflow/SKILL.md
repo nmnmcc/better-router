@@ -26,17 +26,17 @@ import { Effect, Schema } from "effect"
 import { Activity, Workflow } from "effect/unstable/workflow"
 
 const Charge = Activity.make({
-  name: "billing.charge",
-  success: Schema.Void,
-  error: Schema.String,
-  execute: Effect.succeed(undefined),
+	name: "billing.charge",
+	success: Schema.Void,
+	error: Schema.String,
+	execute: Effect.succeed(undefined),
 })
 
 const Billing = Workflow.make("billing.run", {
-  payload: { id: Schema.String },
-  success: Schema.Void,
-  error: Schema.String,
-  idempotencyKey: ({ id }) => id,
+	payload: { id: Schema.String },
+	success: Schema.Void,
+	error: Schema.String,
+	idempotencyKey: ({ id }) => id,
 })
 
 const BillingLayer = Billing.toLayer(() => Charge.execute)

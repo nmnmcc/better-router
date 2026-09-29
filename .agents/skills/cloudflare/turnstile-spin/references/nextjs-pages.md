@@ -6,16 +6,16 @@ For older Next.js projects using `pages/` rather than `app/`. The widget renders
 import Script from "next/script"
 
 export default function SignupPage() {
-  return (
-    <>
-      <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" />
-      <form action="/api/signup" method="POST">
-        <input name="email" type="email" required />
-        <div className="cf-turnstile" data-sitekey="YOUR_SITEKEY" data-action="signup" />
-        <button type="submit">Sign up</button>
-      </form>
-    </>
-  )
+	return (
+		<>
+			<Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" />
+			<form action="/api/signup" method="POST">
+				<input name="email" type="email" required />
+				<div className="cf-turnstile" data-sitekey="YOUR_SITEKEY" data-action="signup" />
+				<button type="submit">Sign up</button>
+			</form>
+		</>
+	)
 }
 ```
 
@@ -27,34 +27,41 @@ API route (canonical siteverify):
 import type { NextApiRequest, NextApiResponse } from "next"
 
 const expectedHostnames = new Set(
-  (process.env.TURNSTILE_HOSTNAMES ?? "")
-    .split(",")
-    .map((h) => h.trim())
-    .filter(Boolean),
+	(process.env.TURNSTILE_HOSTNAMES ?? "")
+		.split(",")
+		.map((h) => h.trim())
+		.filter(Boolean),
 )
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const token = req.body["cf-turnstile-response"] ?? req.body.token
-  if (expectedHostnames.size === 0) {
-    return res.status(403).json({ error: "Verification failed" })
-  }
-  const remoteip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0] ?? req.socket.remoteAddress
+	const token = req.body["cf-turnstile-response"] ?? req.body.token
+	if (expectedHostnames.size === 0) {
+		return res.status(403).json({ error: "Verification failed" })
+	}
+	const remoteip =
+		(req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0] ??
+		req.socket.remoteAddress
 
-  const verify = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      secret: process.env.TURNSTILE_SECRET!,
-      response: token,
-      ...(remoteip ? { remoteip } : {}),
-    }),
-  })
-  const result = await verify.json()
-  if (verify.ok !== true || result.success !== true || result.action !== "signup" || !expectedHostnames.has(result.hostname)) {
-    return res.status(403).json({ error: "Verification failed" })
-  }
-  // process signup
-  return res.json({ ok: true })
+	const verify = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({
+			secret: process.env.TURNSTILE_SECRET!,
+			response: token,
+			...(remoteip ? { remoteip } : {}),
+		}),
+	})
+	const result = await verify.json()
+	if (
+		verify.ok !== true ||
+		result.success !== true ||
+		result.action !== "signup" ||
+		!expectedHostnames.has(result.hostname)
+	) {
+		return res.status(403).json({ error: "Verification failed" })
+	}
+	// process signup
+	return res.json({ ok: true })
 }
 ```
 

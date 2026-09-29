@@ -20,14 +20,14 @@ from a required secret.
 import { Config, Effect } from "effect"
 
 const settings = Config.all({
-  port: Config.Number("PORT").pipe(Config.withDefault(8080)),
-  databaseUrl: Config.URL("DATABASE_URL"),
-  debug: Config.Boolean("DEBUG").pipe(Config.withDefault(false)),
+	port: Config.Number("PORT").pipe(Config.withDefault(8080)),
+	databaseUrl: Config.URL("DATABASE_URL"),
+	debug: Config.Boolean("DEBUG").pipe(Config.withDefault(false)),
 })
 
 const loadSettings = Effect.gen(function* () {
-  const value = yield* settings
-  return value
+	const value = yield* settings
+	return value
 })
 ```
 

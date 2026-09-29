@@ -17,14 +17,21 @@ CLI: `npx wrangler r2 sql query "{WAREHOUSE}" "<SQL>"` (with `WRANGLER_R2_SQL_AU
 
 ```json
 {
-  "result": {
-    "request_id": "dqe-prod-01...",
-    "schema": [{ "name": "cnt", "descriptor": { "type": { "name": "int64" }, "nullable": false } }],
-    "rows": [{ "category": "Electronics", "cnt": 12345 }],
-    "metrics": { "r2_requests_count": 5, "files_scanned": 29, "bytes_scanned": 12345678, "cache_hits": 0 }
-  },
-  "success": true,
-  "errors": []
+	"result": {
+		"request_id": "dqe-prod-01...",
+		"schema": [
+			{ "name": "cnt", "descriptor": { "type": { "name": "int64" }, "nullable": false } }
+		],
+		"rows": [{ "category": "Electronics", "cnt": 12345 }],
+		"metrics": {
+			"r2_requests_count": 5,
+			"files_scanned": 29,
+			"bytes_scanned": 12345678,
+			"cache_hits": 0
+		}
+	},
+	"success": true,
+	"errors": []
 }
 ```
 

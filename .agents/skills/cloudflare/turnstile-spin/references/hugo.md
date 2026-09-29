@@ -6,9 +6,13 @@ For Hugo static sites. The widget renders on any page that includes the partial;
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 
 <form action="{{ .Site.Params.turnstileFormEndpoint }}" method="POST">
-  <input name="email" type="email" required />
-  <div class="cf-turnstile" data-sitekey="{{ .Site.Params.turnstileSitekey }}" data-action="subscribe"></div>
-  <button type="submit">Subscribe</button>
+	<input name="email" type="email" required />
+	<div
+		class="cf-turnstile"
+		data-sitekey="{{ .Site.Params.turnstileSitekey }}"
+		data-action="subscribe"
+	></div>
+	<button type="submit">Subscribe</button>
 </form>
 ```
 
@@ -34,35 +38,40 @@ Hugo doesn't host server-side code, so the form endpoint must live elsewhere. Tw
 
 ```js
 export async function onRequestPost({ request, env }) {
-  const form = await request.formData()
-  const token = form.get("cf-turnstile-response")
+	const form = await request.formData()
+	const token = form.get("cf-turnstile-response")
 
-  const expectedHostnames = new Set(
-    (env.TURNSTILE_HOSTNAMES ?? "")
-      .split(",")
-      .map((h) => h.trim())
-      .filter(Boolean),
-  )
-  if (expectedHostnames.size === 0) {
-    return new Response("forbidden", { status: 403 })
-  }
+	const expectedHostnames = new Set(
+		(env.TURNSTILE_HOSTNAMES ?? "")
+			.split(",")
+			.map((h) => h.trim())
+			.filter(Boolean),
+	)
+	if (expectedHostnames.size === 0) {
+		return new Response("forbidden", { status: 403 })
+	}
 
-  const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      secret: env.TURNSTILE_SECRET,
-      response: token,
-      remoteip: request.headers.get("CF-Connecting-IP"),
-    }),
-  })
-  const result = await r.json()
-  if (r.ok !== true || result.success !== true || result.action !== "subscribe" || !expectedHostnames.has(result.hostname)) {
-    return new Response("forbidden", { status: 403 })
-  }
+	const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({
+			secret: env.TURNSTILE_SECRET,
+			response: token,
+			remoteip: request.headers.get("CF-Connecting-IP"),
+		}),
+	})
+	const result = await r.json()
+	if (
+		r.ok !== true ||
+		result.success !== true ||
+		result.action !== "subscribe" ||
+		!expectedHostnames.has(result.hostname)
+	) {
+		return new Response("forbidden", { status: 403 })
+	}
 
-  // process subscribe
-  return new Response("ok")
+	// process subscribe
+	return new Response("ok")
 }
 ```
 

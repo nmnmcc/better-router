@@ -26,7 +26,11 @@ script-src https://static.cloudflareinsights.com https://cloudflareinsights.com;
 Dashboard → Web Analytics → Add site → Enter hostname → Copy snippet
 
 ```html
-<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "YOUR_TOKEN", "spa": true}'></script>
+<script
+	defer
+	src="https://static.cloudflareinsights.com/beacon.min.js"
+	data-cf-beacon='{"token": "YOUR_TOKEN", "spa": true}'
+></script>
 ```
 
 **Limits:** 10 non-proxied sites per account
@@ -50,7 +54,7 @@ Dashboard → Web Analytics → Add site → Enter hostname → Copy snippet
 ```typescript
 // Only load in production
 if (process.env.NODE_ENV === "production") {
-  // Load beacon
+	// Load beacon
 }
 ```
 

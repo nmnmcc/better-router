@@ -33,12 +33,14 @@ const provider = new cloudflare.Provider("cf", { apiToken: process.env.CLOUDFLAR
 
 // API Key (legacy): CLOUDFLARE_API_KEY + CLOUDFLARE_EMAIL env
 const provider = new cloudflare.Provider("cf", {
-  apiKey: process.env.CLOUDFLARE_API_KEY,
-  email: process.env.CLOUDFLARE_EMAIL,
+	apiKey: process.env.CLOUDFLARE_API_KEY,
+	email: process.env.CLOUDFLARE_EMAIL,
 })
 
 // API User Service Key: CLOUDFLARE_API_USER_SERVICE_KEY env
-const provider = new cloudflare.Provider("cf", { apiUserServiceKey: process.env.CLOUDFLARE_API_USER_SERVICE_KEY })
+const provider = new cloudflare.Provider("cf", {
+	apiUserServiceKey: process.env.CLOUDFLARE_API_USER_SERVICE_KEY,
+})
 ```
 
 ## Setup
@@ -49,15 +51,15 @@ const provider = new cloudflare.Provider("cf", { apiUserServiceKey: process.env.
 name: my-cloudflare-app
 runtime: nodejs
 config:
-  cloudflare:apiToken:
-    value: ${CLOUDFLARE_API_TOKEN}
+    cloudflare:apiToken:
+        value: ${CLOUDFLARE_API_TOKEN}
 ```
 
 **Pulumi.<stack>.yaml:**
 
 ```yaml
 config:
-  cloudflare:accountId: "abc123..."
+    cloudflare:accountId: "abc123..."
 ```
 
 **index.ts:**

@@ -26,7 +26,7 @@ Use the generated binding type in your environment definition:
 
 ```typescript
 interface Env {
-  ARTIFACTS: Artifacts
+	ARTIFACTS: Artifacts
 }
 ```
 

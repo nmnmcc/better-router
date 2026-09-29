@@ -21,7 +21,10 @@ invalid bytes.
 ```ts
 import { Effect, Encoding } from "effect"
 
-const decodeToken = (token: string) => Effect.fromResult(Encoding.decodeBase64Url(token)).pipe(Effect.mapError((cause) => ({ _tag: "InvalidToken" as const, cause })))
+const decodeToken = (token: string) =>
+	Effect.fromResult(Encoding.decodeBase64Url(token)).pipe(
+		Effect.mapError((cause) => ({ _tag: "InvalidToken" as const, cause })),
+	)
 ```
 
 `decodeBase64Url` returns a `Result` in rc.117; `Effect.fromResult` raises its

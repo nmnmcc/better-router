@@ -34,10 +34,10 @@
 
 1. Check Security Events for specific WAF rule ID blocking Yandex
 2. Create WAF exception:
-   ```txt
-   (http.user_agent contains "YandexBot" and ip.src in {<yandex-ip-range>})
-   Action: Skip (WAF Managed Ruleset)
-   ```
+    ```txt
+    (http.user_agent contains "YandexBot" and ip.src in {<yandex-ip-range>})
+    Action: Skip (WAF Managed Ruleset)
+    ```
 3. Monitor Bot Analytics for 48h
 4. Remove exception after propagation completes
 

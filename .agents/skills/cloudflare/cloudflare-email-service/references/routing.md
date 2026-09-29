@@ -10,10 +10,10 @@ Export an `email()` function from your Worker. No special wrangler binding neede
 
 ```typescript
 export default {
-  async email(message, env, ctx): Promise<void> {
-    console.log(`Email from ${message.from} to ${message.to}`)
-    await message.forward("team@company.com")
-  },
+	async email(message, env, ctx): Promise<void> {
+		console.log(`Email from ${message.from} to ${message.to}`)
+		await message.forward("team@company.com")
+	},
 } satisfies ExportedHandler<Env>
 ```
 
@@ -40,10 +40,10 @@ await message.forward("team@company.com")
 
 // With custom headers
 await message.forward(
-  "team@company.com",
-  new Headers({
-    "X-Original-Recipient": message.to,
-  }),
+	"team@company.com",
+	new Headers({
+		"X-Original-Recipient": message.to,
+	}),
 )
 ```
 
@@ -127,33 +127,47 @@ The `email()` handler stores the email and returns immediately. Replies happen l
 import PostalMime from "postal-mime"
 
 export class MailboxDO extends DurableObject {
-  async storeEmail(from: string, to: string, subject: string, body: string, messageId: string, inReplyTo: string | null) {
-    this.ctx.storage.sql.exec(
-      `INSERT INTO emails (sender, recipient, subject, body, message_id, in_reply_to, date, read)
+	async storeEmail(
+		from: string,
+		to: string,
+		subject: string,
+		body: string,
+		messageId: string,
+		inReplyTo: string | null,
+	) {
+		this.ctx.storage.sql.exec(
+			`INSERT INTO emails (sender, recipient, subject, body, message_id, in_reply_to, date, read)
        VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 0)`,
-      from,
-      to,
-      subject,
-      body,
-      messageId,
-      inReplyTo,
-    )
-  }
+			from,
+			to,
+			subject,
+			body,
+			messageId,
+			inReplyTo,
+		)
+	}
 }
 
 export default {
-  async email(message, env, ctx) {
-    const raw = await new Response(message.raw).arrayBuffer()
-    const parsed = await PostalMime.parse(raw)
+	async email(message, env, ctx) {
+		const raw = await new Response(message.raw).arrayBuffer()
+		const parsed = await PostalMime.parse(raw)
 
-    const id = env.MAILBOX.idFromName(message.to)
-    const stub = env.MAILBOX.get(id)
+		const id = env.MAILBOX.idFromName(message.to)
+		const stub = env.MAILBOX.get(id)
 
-    await stub.storeEmail(message.from, message.to, parsed.subject || "(no subject)", parsed.text || parsed.html || "", message.headers.get("message-id") || "", message.headers.get("in-reply-to") || null)
+		await stub.storeEmail(
+			message.from,
+			message.to,
+			parsed.subject || "(no subject)",
+			parsed.text || parsed.html || "",
+			message.headers.get("message-id") || "",
+			message.headers.get("in-reply-to") || null,
+		)
 
-    // Optionally trigger an AI agent to draft a reply (non-blocking)
-    // ctx.waitUntil(notifyAgent(env, message.to, emailId));
-  },
+		// Optionally trigger an AI agent to draft a reply (non-blocking)
+		// ctx.waitUntil(notifyAgent(env, message.to, emailId));
+	},
 } satisfies ExportedHandler<Env>
 ```
 
@@ -164,21 +178,21 @@ When a user (or agent) decides to reply, build proper threading headers and send
 ```typescript
 // In an HTTP handler or agent tool — not in the email() handler
 async function replyToStoredEmail(env: Env, original: StoredEmail, replyBody: string) {
-  // Build threading headers (In-Reply-To + References per RFC 2822)
-  const headers: Record<string, string> = {}
-  if (original.messageId) {
-    headers["In-Reply-To"] = original.messageId
-    headers["References"] = original.messageId
-  }
+	// Build threading headers (In-Reply-To + References per RFC 2822)
+	const headers: Record<string, string> = {}
+	if (original.messageId) {
+		headers["In-Reply-To"] = original.messageId
+		headers["References"] = original.messageId
+	}
 
-  await env.EMAIL.send({
-    to: original.sender,
-    from: original.recipient,
-    subject: `Re: ${original.subject}`,
-    text: replyBody,
-    html: `<p>${replyBody}</p>`,
-    headers,
-  })
+	await env.EMAIL.send({
+		to: original.sender,
+		from: original.recipient,
+		subject: `Re: ${original.subject}`,
+		text: replyBody,
+		html: `<p>${replyBody}</p>`,
+		headers,
+	})
 }
 ```
 

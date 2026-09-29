@@ -18,8 +18,8 @@ const val = await env.FLAGS.getBooleanValue("my-flag", false)
 
 // ✅ GOOD — pass context attributes that rules reference
 const val = await env.FLAGS.getBooleanValue("my-flag", false, {
-  userId: "user-42",
-  plan: "enterprise",
+	userId: "user-42",
+	plan: "enterprise",
 })
 ```
 
@@ -55,7 +55,7 @@ const val = await env.FLAGS.getBooleanValue("gradual-rollout", false)
 
 // ✅ GOOD — stable userId for consistent bucketing
 const val = await env.FLAGS.getBooleanValue("gradual-rollout", false, {
-  userId: sessionUserId,
+	userId: sessionUserId,
 })
 ```
 
@@ -134,14 +134,14 @@ Flag evaluation via the binding is fast but not free. Avoid evaluating the same 
 ```typescript
 // ❌ BAD
 for (const item of items) {
-  const enabled = await env.FLAGS.getBooleanValue("my-flag", false, ctx)
-  // ...
+	const enabled = await env.FLAGS.getBooleanValue("my-flag", false, ctx)
+	// ...
 }
 
 // ✅ GOOD
 const enabled = await env.FLAGS.getBooleanValue("my-flag", false, ctx)
 for (const item of items) {
-  // use `enabled`
+	// use `enabled`
 }
 ```
 
@@ -152,9 +152,9 @@ The binding avoids HTTP overhead entirely. Only use the SDK inside Workers when 
 ```typescript
 // ❌ Unnecessary HTTP overhead inside a Worker
 const provider = new FlagshipServerProvider({
-  appId: "...",
-  accountId: "...",
-  authToken: "...",
+	appId: "...",
+	accountId: "...",
+	authToken: "...",
 })
 
 // ✅ Use the binding directly, or pass it to the SDK

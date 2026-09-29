@@ -49,18 +49,21 @@ import { Effect, Schedule } from "effect"
 type NotFound = { readonly _tag: "NotFound"; readonly id: string }
 
 const loadUser = (
-  id: string,
+	id: string,
 ): Effect.Effect<
-  {
-    readonly id: string
-    readonly name: string
-  },
-  NotFound
-> => (id === "missing" ? Effect.fail<NotFound>({ _tag: "NotFound", id }) : Effect.succeed({ id, name: "Ada" }))
+	{
+		readonly id: string
+		readonly name: string
+	},
+	NotFound
+> =>
+	id === "missing"
+		? Effect.fail<NotFound>({ _tag: "NotFound", id })
+		: Effect.succeed({ id, name: "Ada" })
 
 const program = loadUser("u1").pipe(
-  Effect.retry(Schedule.recurs(2)),
-  Effect.catchTag("NotFound", (error) => Effect.succeed({ id: error.id, name: "anonymous" })),
+	Effect.retry(Schedule.recurs(2)),
+	Effect.catchTag("NotFound", (error) => Effect.succeed({ id: error.id, name: "anonymous" })),
 )
 
 const user = await Effect.runPromise(program)
@@ -82,7 +85,7 @@ import { Cause, Effect, Exit } from "effect"
 
 const exit = await Effect.runPromiseExit(Effect.fail("bad-input"))
 if (Exit.isFailure(exit)) {
-  console.error(Cause.pretty(exit.cause))
+	console.error(Cause.pretty(exit.cause))
 }
 ```
 

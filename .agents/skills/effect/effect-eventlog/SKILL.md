@@ -18,19 +18,30 @@ import { Effect, Layer, Schema } from "effect"
 import { EventGroup, EventJournal, EventLog, EventLogEncryption } from "effect/unstable/eventlog"
 
 const Users = EventGroup.empty.add({
-  tag: "UserCreated",
-  primaryKey: (payload: { readonly id: string }) => payload.id,
-  payload: Schema.Struct({ id: Schema.String }),
+	tag: "UserCreated",
+	primaryKey: (payload: { readonly id: string }) => payload.id,
+	payload: Schema.Struct({ id: Schema.String }),
 })
 const UserSchema = EventLog.schema(Users)
 
-const Handlers = EventLog.group(Users, (handlers) => handlers.handle("UserCreated", ({ payload }) => Effect.log(`rebuild user ${payload.id}`).pipe(Effect.asVoid))).pipe(Layer.provide(EventLog.layerRegistry))
+const Handlers = EventLog.group(Users, (handlers) =>
+	handlers.handle("UserCreated", ({ payload }) =>
+		Effect.log(`rebuild user ${payload.id}`).pipe(Effect.asVoid),
+	),
+).pipe(Layer.provide(EventLog.layerRegistry))
 
-const LogLayer = EventLog.layer(UserSchema, Handlers).pipe(Layer.provide(EventJournal.layerMemory), Layer.provide(Layer.effect(EventLog.Identity, EventLog.makeIdentity).pipe(Layer.provide(EventLogEncryption.layerSubtle))))
+const LogLayer = EventLog.layer(UserSchema, Handlers).pipe(
+	Layer.provide(EventJournal.layerMemory),
+	Layer.provide(
+		Layer.effect(EventLog.Identity, EventLog.makeIdentity).pipe(
+			Layer.provide(EventLogEncryption.layerSubtle),
+		),
+	),
+)
 
 const append = Effect.gen(function* () {
-  const write = yield* EventLog.makeClient(UserSchema)
-  yield* write("UserCreated", { id: "user-1" })
+	const write = yield* EventLog.makeClient(UserSchema)
+	yield* write("UserCreated", { id: "user-1" })
 }).pipe(Effect.provide(LogLayer))
 ```
 

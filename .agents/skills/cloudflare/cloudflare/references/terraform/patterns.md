@@ -93,8 +93,8 @@ output "d1_database_id" { value = cloudflare_d1_database.app.id }
 # GitHub Actions: terraform apply → envsubst wrangler.jsonc.template → wrangler deploy
 - run: terraform apply -auto-approve
 - run: |
-    export KV_NAMESPACE_ID=$(terraform output -raw kv_namespace_id)
-    envsubst < wrangler.jsonc.template > wrangler.jsonc
+      export KV_NAMESPACE_ID=$(terraform output -raw kv_namespace_id)
+      envsubst < wrangler.jsonc.template > wrangler.jsonc
 - run: wrangler deploy
 ```
 

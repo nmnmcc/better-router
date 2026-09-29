@@ -46,35 +46,38 @@ No R2 SQL binding exists — query the REST endpoint via `fetch()`.
 
 ```typescript
 interface Env {
-  ACCOUNT_ID: string
-  BUCKET: string
-  R2_SQL_TOKEN: string
+	ACCOUNT_ID: string
+	BUCKET: string
+	R2_SQL_TOKEN: string
 }
 
 async function queryR2SQL(env: Env, query: string) {
-  const url = `https://api.sql.cloudflarestorage.com/api/v1/accounts/${env.ACCOUNT_ID}/r2-sql/query/${env.BUCKET}`
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.R2_SQL_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
-  })
-  if (!resp.ok) throw new Error(`R2 SQL ${resp.status}: ${await resp.text()}`)
-  return ((await resp.json()) as any).result
+	const url = `https://api.sql.cloudflarestorage.com/api/v1/accounts/${env.ACCOUNT_ID}/r2-sql/query/${env.BUCKET}`
+	const resp = await fetch(url, {
+		method: "POST",
+		headers: {
+			Authorization: `Bearer ${env.R2_SQL_TOKEN}`,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({ query }),
+	})
+	if (!resp.ok) throw new Error(`R2 SQL ${resp.status}: ${await resp.text()}`)
+	return ((await resp.json()) as any).result
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
-    if (new URL(req.url).pathname === "/api/analytics") {
-      const result = await queryR2SQL(
-        env,
-        `
+	async fetch(req: Request, env: Env): Promise<Response> {
+		if (new URL(req.url).pathname === "/api/analytics") {
+			const result = await queryR2SQL(
+				env,
+				`
         SELECT category, COUNT(*) AS cnt FROM analytics.events
         GROUP BY category ORDER BY cnt DESC LIMIT 10`,
-      )
-      return Response.json(result.rows)
-    }
-    return new Response("Not found", { status: 404 })
-  },
+			)
+			return Response.json(result.rows)
+		}
+		return new Response("Not found", { status: 404 })
+	},
 }
 ```
 

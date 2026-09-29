@@ -1,0 +1,19 @@
+{
+	"name": "@better-router/example-sdk-call",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"start": "tsx src/main.ts"
+	},
+	"dependencies": {
+		"@better-router/core": "workspace:*",
+		"@better-router/plugin-openai-responses": "workspace:*",
+		"@effect/platform-node": "4.0.0-rc.117",
+		"effect": "4.0.0-rc.117"
+	},
+	"devDependencies": {
+		"@types/node": "^24.0.0",
+		"tsx": "^4.23.15"
+	}
+}

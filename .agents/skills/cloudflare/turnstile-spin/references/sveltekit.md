@@ -65,37 +65,42 @@ import { fail } from "@sveltejs/kit"
 import { TURNSTILE_SECRET, TURNSTILE_HOSTNAMES } from "$env/static/private"
 
 const expectedHostnames = new Set(
-  (TURNSTILE_HOSTNAMES ?? "")
-    .split(",")
-    .map((h) => h.trim())
-    .filter(Boolean),
+	(TURNSTILE_HOSTNAMES ?? "")
+		.split(",")
+		.map((h) => h.trim())
+		.filter(Boolean),
 )
 
 export const actions: Actions = {
-  default: async ({ request, getClientAddress }) => {
-    const data = await request.formData()
-    const token = data.get("cf-turnstile-response")
-    if (typeof token !== "string" || expectedHostnames.size === 0) {
-      return fail(403, { error: "Verification failed" })
-    }
+	default: async ({ request, getClientAddress }) => {
+		const data = await request.formData()
+		const token = data.get("cf-turnstile-response")
+		if (typeof token !== "string" || expectedHostnames.size === 0) {
+			return fail(403, { error: "Verification failed" })
+		}
 
-    const verify = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        secret: TURNSTILE_SECRET,
-        response: token,
-        remoteip: getClientAddress(),
-      }),
-    })
-    const result = await verify.json()
-    if (verify.ok !== true || result.success !== true || result.action !== "signup" || !expectedHostnames.has(result.hostname)) {
-      return fail(403, { error: "Verification failed" })
-    }
+		const verify = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+			method: "POST",
+			headers: { "Content-Type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				secret: TURNSTILE_SECRET,
+				response: token,
+				remoteip: getClientAddress(),
+			}),
+		})
+		const result = await verify.json()
+		if (
+			verify.ok !== true ||
+			result.success !== true ||
+			result.action !== "signup" ||
+			!expectedHostnames.has(result.hostname)
+		) {
+			return fail(403, { error: "Verification failed" })
+		}
 
-    // process signup
-    return { ok: true }
-  },
+		// process signup
+		return { ok: true }
+	},
 }
 ```
 
@@ -118,32 +123,37 @@ import type { RequestHandler } from "./$types"
 import { TURNSTILE_SECRET, TURNSTILE_HOSTNAMES } from "$env/static/private"
 
 const expectedHostnames = new Set(
-  (TURNSTILE_HOSTNAMES ?? "")
-    .split(",")
-    .map((h) => h.trim())
-    .filter(Boolean),
+	(TURNSTILE_HOSTNAMES ?? "")
+		.split(",")
+		.map((h) => h.trim())
+		.filter(Boolean),
 )
 
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-  const { token } = await request.json()
-  if (expectedHostnames.size === 0) {
-    return new Response("forbidden", { status: 403 })
-  }
-  const verify = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      secret: TURNSTILE_SECRET,
-      response: token,
-      remoteip: getClientAddress(),
-    }),
-  })
-  const result = await verify.json()
-  if (verify.ok !== true || result.success !== true || result.action !== "signup" || !expectedHostnames.has(result.hostname)) {
-    return new Response("forbidden", { status: 403 })
-  }
-  // process signup
-  return new Response(JSON.stringify({ ok: true }), { status: 200 })
+	const { token } = await request.json()
+	if (expectedHostnames.size === 0) {
+		return new Response("forbidden", { status: 403 })
+	}
+	const verify = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({
+			secret: TURNSTILE_SECRET,
+			response: token,
+			remoteip: getClientAddress(),
+		}),
+	})
+	const result = await verify.json()
+	if (
+		verify.ok !== true ||
+		result.success !== true ||
+		result.action !== "signup" ||
+		!expectedHostnames.has(result.hostname)
+	) {
+		return new Response("forbidden", { status: 403 })
+	}
+	// process signup
+	return new Response(JSON.stringify({ ok: true }), { status: 200 })
 }
 ```
 

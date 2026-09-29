@@ -9,70 +9,74 @@ import { type FormEvent, useRef, useState } from "react"
 
 type TurnstileWidgetId = string
 type TurnstileApi = {
-  render: (
-    container: HTMLElement,
-    options: {
-      sitekey: string
-      action: string
-      callback: (token: string) => void
-    },
-  ) => TurnstileWidgetId
-  reset: (widgetId: TurnstileWidgetId) => void
+	render: (
+		container: HTMLElement,
+		options: {
+			sitekey: string
+			action: string
+			callback: (token: string) => void
+		},
+	) => TurnstileWidgetId
+	reset: (widgetId: TurnstileWidgetId) => void
 }
 
 declare global {
-  interface Window {
-    turnstile: TurnstileApi
-  }
+	interface Window {
+		turnstile: TurnstileApi
+	}
 }
 
 export default function SignupPage() {
-  const turnstileContainer = useRef<HTMLDivElement>(null)
-  const signupWidgetId = useRef<TurnstileWidgetId | null>(null)
-  const [token, setToken] = useState("")
+	const turnstileContainer = useRef<HTMLDivElement>(null)
+	const signupWidgetId = useRef<TurnstileWidgetId | null>(null)
+	const [token, setToken] = useState("")
 
-  function renderTurnstile() {
-    if (!turnstileContainer.current || signupWidgetId.current !== null) return
-    signupWidgetId.current = window.turnstile.render(turnstileContainer.current, {
-      sitekey: "YOUR_SITEKEY",
-      action: "signup",
-      callback: setToken,
-    })
-  }
+	function renderTurnstile() {
+		if (!turnstileContainer.current || signupWidgetId.current !== null) return
+		signupWidgetId.current = window.turnstile.render(turnstileContainer.current, {
+			sitekey: "YOUR_SITEKEY",
+			action: "signup",
+			callback: setToken,
+		})
+	}
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    try {
-      const res = await fetch("/api/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.ok !== true) throw new Error("Submission failed")
-      // proceed
-    } catch {
-      // surface the error
-    } finally {
-      if (signupWidgetId.current !== null) {
-        window.turnstile.reset(signupWidgetId.current)
-        setToken("")
-      }
-    }
-  }
+	async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+		e.preventDefault()
+		try {
+			const res = await fetch("/api/signup", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ token }),
+			})
+			const data = await res.json()
+			if (!res.ok || data.ok !== true) throw new Error("Submission failed")
+			// proceed
+		} catch {
+			// surface the error
+		} finally {
+			if (signupWidgetId.current !== null) {
+				window.turnstile.reset(signupWidgetId.current)
+				setToken("")
+			}
+		}
+	}
 
-  return (
-    <>
-      <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" strategy="afterInteractive" onReady={renderTurnstile} />
-      <form onSubmit={handleSubmit}>
-        <input name="email" type="email" required />
-        <div ref={turnstileContainer} />
-        <button type="submit" disabled={!token}>
-          Sign up
-        </button>
-      </form>
-    </>
-  )
+	return (
+		<>
+			<Script
+				src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+				strategy="afterInteractive"
+				onReady={renderTurnstile}
+			/>
+			<form onSubmit={handleSubmit}>
+				<input name="email" type="email" required />
+				<div ref={turnstileContainer} />
+				<button type="submit" disabled={!token}>
+					Sign up
+				</button>
+			</form>
+		</>
+	)
 }
 ```
 
@@ -82,36 +86,41 @@ API route (canonical siteverify):
 
 ```ts title="app/api/signup/route.ts"
 const expectedHostnames = new Set(
-  (process.env.TURNSTILE_HOSTNAMES ?? "")
-    .split(",")
-    .map((h) => h.trim())
-    .filter(Boolean),
+	(process.env.TURNSTILE_HOSTNAMES ?? "")
+		.split(",")
+		.map((h) => h.trim())
+		.filter(Boolean),
 )
 
 export async function POST(req: Request) {
-  const { token } = await req.json()
-  const remoteip = req.headers.get("x-forwarded-for") ?? undefined
+	const { token } = await req.json()
+	const remoteip = req.headers.get("x-forwarded-for") ?? undefined
 
-  if (expectedHostnames.size === 0) {
-    return new Response("forbidden", { status: 403 })
-  }
+	if (expectedHostnames.size === 0) {
+		return new Response("forbidden", { status: 403 })
+	}
 
-  const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      secret: process.env.TURNSTILE_SECRET!,
-      response: token,
-      ...(remoteip ? { remoteip } : {}),
-    }),
-  })
-  const result = await r.json()
-  if (r.ok !== true || result.success !== true || result.action !== "signup" || !expectedHostnames.has(result.hostname)) {
-    return new Response("forbidden", { status: 403 })
-  }
+	const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({
+			secret: process.env.TURNSTILE_SECRET!,
+			response: token,
+			...(remoteip ? { remoteip } : {}),
+		}),
+	})
+	const result = await r.json()
+	if (
+		r.ok !== true ||
+		result.success !== true ||
+		result.action !== "signup" ||
+		!expectedHostnames.has(result.hostname)
+	) {
+		return new Response("forbidden", { status: 403 })
+	}
 
-  // existing signup logic runs here
-  return Response.json({ ok: true })
+	// existing signup logic runs here
+	return Response.json({ ok: true })
 }
 ```
 
@@ -128,34 +137,42 @@ import { headers } from "next/headers"
 export type SignupState = { ok?: true; error?: string } | null
 
 const expectedHostnames = new Set(
-  (process.env.TURNSTILE_HOSTNAMES ?? "")
-    .split(",")
-    .map((h) => h.trim())
-    .filter(Boolean),
+	(process.env.TURNSTILE_HOSTNAMES ?? "")
+		.split(",")
+		.map((h) => h.trim())
+		.filter(Boolean),
 )
 
-export async function submitSignup(_previousState: SignupState, formData: FormData): Promise<SignupState> {
-  const token = formData.get("cf-turnstile-response")
-  if (typeof token !== "string") return { error: "Verification failed" }
-  if (expectedHostnames.size === 0) return { error: "Verification failed" }
-  const remoteip = (await headers()).get("x-forwarded-for") ?? undefined
+export async function submitSignup(
+	_previousState: SignupState,
+	formData: FormData,
+): Promise<SignupState> {
+	const token = formData.get("cf-turnstile-response")
+	if (typeof token !== "string") return { error: "Verification failed" }
+	if (expectedHostnames.size === 0) return { error: "Verification failed" }
+	const remoteip = (await headers()).get("x-forwarded-for") ?? undefined
 
-  const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      secret: process.env.TURNSTILE_SECRET!,
-      response: token,
-      ...(remoteip ? { remoteip } : {}),
-    }),
-  })
-  const result = await r.json()
-  if (r.ok !== true || result.success !== true || result.action !== "signup" || !expectedHostnames.has(result.hostname)) {
-    return { error: "Verification failed" }
-  }
+	const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({
+			secret: process.env.TURNSTILE_SECRET!,
+			response: token,
+			...(remoteip ? { remoteip } : {}),
+		}),
+	})
+	const result = await r.json()
+	if (
+		r.ok !== true ||
+		result.success !== true ||
+		result.action !== "signup" ||
+		!expectedHostnames.has(result.hostname)
+	) {
+		return { error: "Verification failed" }
+	}
 
-  // process signup
-  return { ok: true }
+	// process signup
+	return { ok: true }
 }
 ```
 
@@ -167,60 +184,67 @@ import { submitSignup, type SignupState } from "./actions"
 
 type TurnstileWidgetId = string
 type TurnstileApi = {
-  render: (
-    container: HTMLElement,
-    options: {
-      sitekey: string
-      action: string
-      callback: (token: string) => void
-    },
-  ) => TurnstileWidgetId
-  reset: (widgetId: TurnstileWidgetId) => void
+	render: (
+		container: HTMLElement,
+		options: {
+			sitekey: string
+			action: string
+			callback: (token: string) => void
+		},
+	) => TurnstileWidgetId
+	reset: (widgetId: TurnstileWidgetId) => void
 }
 
 declare global {
-  interface Window {
-    turnstile: TurnstileApi
-  }
+	interface Window {
+		turnstile: TurnstileApi
+	}
 }
 
 export default function SignupPage() {
-  const turnstileContainer = useRef<HTMLDivElement>(null)
-  const signupActionWidgetId = useRef<TurnstileWidgetId | null>(null)
-  const [token, setToken] = useState("")
-  const [state, action, pending] = useActionState(async (previousState: SignupState, formData: FormData) => {
-    try {
-      return await submitSignup(previousState, formData)
-    } finally {
-      if (signupActionWidgetId.current !== null) {
-        window.turnstile.reset(signupActionWidgetId.current)
-        setToken("")
-      }
-    }
-  }, null)
+	const turnstileContainer = useRef<HTMLDivElement>(null)
+	const signupActionWidgetId = useRef<TurnstileWidgetId | null>(null)
+	const [token, setToken] = useState("")
+	const [state, action, pending] = useActionState(
+		async (previousState: SignupState, formData: FormData) => {
+			try {
+				return await submitSignup(previousState, formData)
+			} finally {
+				if (signupActionWidgetId.current !== null) {
+					window.turnstile.reset(signupActionWidgetId.current)
+					setToken("")
+				}
+			}
+		},
+		null,
+	)
 
-  function renderTurnstile() {
-    if (!turnstileContainer.current || signupActionWidgetId.current !== null) return
-    signupActionWidgetId.current = window.turnstile.render(turnstileContainer.current, {
-      sitekey: "YOUR_SITEKEY",
-      action: "signup",
-      callback: setToken,
-    })
-  }
+	function renderTurnstile() {
+		if (!turnstileContainer.current || signupActionWidgetId.current !== null) return
+		signupActionWidgetId.current = window.turnstile.render(turnstileContainer.current, {
+			sitekey: "YOUR_SITEKEY",
+			action: "signup",
+			callback: setToken,
+		})
+	}
 
-  return (
-    <>
-      <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" strategy="afterInteractive" onReady={renderTurnstile} />
-      <form action={action}>
-        <input name="email" type="email" required />
-        <div ref={turnstileContainer} />
-        {state?.error && <p role="alert">{state.error}</p>}
-        <button type="submit" disabled={!token || pending}>
-          Sign up
-        </button>
-      </form>
-    </>
-  )
+	return (
+		<>
+			<Script
+				src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+				strategy="afterInteractive"
+				onReady={renderTurnstile}
+			/>
+			<form action={action}>
+				<input name="email" type="email" required />
+				<div ref={turnstileContainer} />
+				{state?.error && <p role="alert">{state.error}</p>}
+				<button type="submit" disabled={!token || pending}>
+					Sign up
+				</button>
+			</form>
+		</>
+	)
 }
 ```
 

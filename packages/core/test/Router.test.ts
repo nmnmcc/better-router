@@ -14,324 +14,648 @@ import { RoutingError } from "@better-router/core/Routing"
 import type { ModelRoute } from "@better-router/core/Routing"
 import type { GenerationEvent, GenerationResponse } from "@better-router/core/Generation"
 
-const snapshot = (model = "private") => ({ id: "resp_1", status: "completed", model, output: [] }) as unknown as GenerationResponse
-const created = { type: "response.created", response: { id: "resp_1", created_at: 1234 } } as GenerationEvent
-const finished = (model = "private") => ({ type: "response.completed", response: snapshot(model) }) as GenerationEvent
-const providerError = ProviderError.make({ kind: "rate_limited", message: "Limited", retryable: true })
-const deployment = (id: string, execute: GenerationExecutor = () => Effect.succeed(Stream.make(created, finished()))): Deployment => ({
-  id,
-  provider: "test",
-  protocol: "test",
-  model: id + "-private",
-  execute: { http: execute },
+const snapshot = (model = "private") =>
+	({ id: "resp_1", status: "completed", model, output: [] }) as unknown as GenerationResponse
+const created = {
+	type: "response.created",
+	response: { id: "resp_1", created_at: 1234 },
+} as GenerationEvent
+const finished = (model = "private") =>
+	({ type: "response.completed", response: snapshot(model) }) as GenerationEvent
+const providerError = ProviderError.make({
+	kind: "rate_limited",
+	message: "Limited",
+	retryable: true,
 })
-const configured = (deployments: readonly Deployment[], extras: Partial<RouterPlugin> = {}): RouterPlugin => ({ id: "test", deployments, ...extras })
-const options = (plugins: readonly RouterPlugin[], ids: readonly string[], extra: Partial<ModelRoute> = {}) => ({ plugins, routes: [{ model: "chat", deployments: ids, ...extra }] })
-const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.flip(Effect.scoped(effect as Effect.Effect<A, E, Scope.Scope>))
+const deployment = (
+	id: string,
+	execute: GenerationExecutor = () => Effect.succeed(Stream.make(created, finished())),
+): Deployment => ({
+	id,
+	provider: "test",
+	protocol: "test",
+	model: id + "-private",
+	execute: { http: execute },
+})
+const configured = (
+	deployments: readonly Deployment[],
+	extras: Partial<RouterPlugin> = {},
+): RouterPlugin => ({ id: "test", deployments, ...extras })
+const options = (
+	plugins: readonly RouterPlugin[],
+	ids: readonly string[],
+	extra: Partial<ModelRoute> = {},
+) => ({ plugins, routes: [{ model: "chat", deployments: ids, ...extra }] })
+const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+	Effect.flip(Effect.scoped(effect as Effect.Effect<A, E, Scope.Scope>))
 
 test("public error schemas retain tagged shapes, reject invalid fields and support matching", () => {
-  const setup = SetupError.cases.DuplicateId.make({ kind: "plugin", id: "same" })
-  assert.equal(setup instanceof Error, true)
-  assert.deepEqual(Schema.encodeSync(SetupError)(setup), { _tag: "DuplicateId", kind: "plugin", id: "same" })
-  assert.equal(SetupError.guards.DuplicateId(setup), true)
-  assert.equal(SetupError.guards.InvalidRoute(setup), false)
-  assert.deepEqual(Schema.decodeUnknownSync(SetupError)(Schema.encodeSync(SetupError)(setup)), setup)
-  assert.throws(() => Schema.decodeUnknownSync(SetupError)({ _tag: "DuplicateId", kind: "other", id: "same" }))
+	const setup = SetupError.cases.DuplicateId.make({ kind: "plugin", id: "same" })
+	assert.equal(setup instanceof Error, true)
+	assert.deepEqual(Schema.encodeSync(SetupError)(setup), {
+		_tag: "DuplicateId",
+		kind: "plugin",
+		id: "same",
+	})
+	assert.equal(SetupError.guards.DuplicateId(setup), true)
+	assert.equal(SetupError.guards.InvalidRoute(setup), false)
+	assert.deepEqual(
+		Schema.decodeUnknownSync(SetupError)(Schema.encodeSync(SetupError)(setup)),
+		setup,
+	)
+	assert.throws(() =>
+		Schema.decodeUnknownSync(SetupError)({ _tag: "DuplicateId", kind: "other", id: "same" }),
+	)
 
-  const error = RouterError.cases.NoRoute.make({ model: "chat" })
-  assert.equal(error instanceof Error, true)
-  assert.equal(RouterError.guards.NoRoute(error), true)
-  assert.equal(RouterError.guards.ProviderFailed(error), false)
-  assert.deepEqual(Schema.decodeUnknownSync(RouterError)(Schema.encodeSync(RouterError)(error)), error)
-  assert.throws(() => Schema.decodeUnknownSync(RouterError)({ _tag: "NoRoute", model: 42 }))
-  assert.equal(Schema.is(RouterError)({ _tag: "ProviderFailed", deployment: "a", cause: { kind: "bad" } }), false)
-  assert.equal(
-    RouterError.match(error, {
-      InvalidRequest: () => "invalid",
-      NoRoute: ({ model }) => `Unknown model: ${model}`,
-      NoAvailableDeployment: () => "unavailable",
-      UnsupportedCapability: () => "unsupported",
-      RoutingFailed: () => "routing",
-      ProviderFailed: () => "provider",
-      MiddlewareFailed: () => "transform",
-      InvalidResponse: () => "response",
-    }),
-    "Unknown model: chat",
-  )
-  const provider = ProviderError.make({ kind: "rate_limited", message: "Limited", retryable: true })
-  assert.equal(provider instanceof Error, true)
-  assert.deepEqual(Schema.decodeUnknownSync(ProviderError)(Schema.encodeSync(ProviderError)(provider)), provider)
-  assert.throws(() => Schema.decodeUnknownSync(ProviderError)({ ...provider, retryable: "yes" }))
-  const routing = RoutingError.make({ message: "No candidate" })
-  assert.equal(routing instanceof Error, true)
-  assert.deepEqual(Schema.decodeUnknownSync(RoutingError)(Schema.encodeSync(RoutingError)(routing)), routing)
-  assert.throws(() => Schema.decodeUnknownSync(RoutingError)({ message: 42 }))
+	const error = RouterError.cases.NoRoute.make({ model: "chat" })
+	assert.equal(error instanceof Error, true)
+	assert.equal(RouterError.guards.NoRoute(error), true)
+	assert.equal(RouterError.guards.ProviderFailed(error), false)
+	assert.deepEqual(
+		Schema.decodeUnknownSync(RouterError)(Schema.encodeSync(RouterError)(error)),
+		error,
+	)
+	assert.throws(() => Schema.decodeUnknownSync(RouterError)({ _tag: "NoRoute", model: 42 }))
+	assert.equal(
+		Schema.is(RouterError)({ _tag: "ProviderFailed", deployment: "a", cause: { kind: "bad" } }),
+		false,
+	)
+	assert.equal(
+		RouterError.match(error, {
+			InvalidRequest: () => "invalid",
+			NoRoute: ({ model }) => `Unknown model: ${model}`,
+			NoAvailableDeployment: () => "unavailable",
+			UnsupportedCapability: () => "unsupported",
+			RoutingFailed: () => "routing",
+			ProviderFailed: () => "provider",
+			MiddlewareFailed: () => "transform",
+			InvalidResponse: () => "response",
+		}),
+		"Unknown model: chat",
+	)
+	const provider = ProviderError.make({
+		kind: "rate_limited",
+		message: "Limited",
+		retryable: true,
+	})
+	assert.equal(provider instanceof Error, true)
+	assert.deepEqual(
+		Schema.decodeUnknownSync(ProviderError)(Schema.encodeSync(ProviderError)(provider)),
+		provider,
+	)
+	assert.throws(() => Schema.decodeUnknownSync(ProviderError)({ ...provider, retryable: "yes" }))
+	const routing = RoutingError.make({ message: "No candidate" })
+	assert.equal(routing instanceof Error, true)
+	assert.deepEqual(
+		Schema.decodeUnknownSync(RoutingError)(Schema.encodeSync(RoutingError)(routing)),
+		routing,
+	)
+	assert.throws(() => Schema.decodeUnknownSync(RoutingError)({ message: 42 }))
 
-  const cause = new Error("startup failed", { cause: new Error("internal details") })
-  const setupFailure = SetupError.cases.PluginStartFailed.make({ plugin: "test", cause })
-  const encodedFailure = Schema.encodeSync(SetupError)(setupFailure)
-  if (encodedFailure._tag !== "PluginStartFailed") assert.fail("Expected PluginStartFailed")
-  assert.equal((encodedFailure.cause as unknown as { message: string }).message, "startup failed")
-  assert.equal("cause" in (encodedFailure.cause as object), false)
-  assert.equal("stack" in (encodedFailure.cause as object), false)
-  const decodedFailure = Schema.decodeUnknownSync(SetupError)(encodedFailure)
-  if (decodedFailure._tag !== "PluginStartFailed") assert.fail("Expected PluginStartFailed")
-  assert.equal(decodedFailure.cause instanceof Error, true)
-  const circular = {
-    message: "bad input",
-    get self(): unknown {
-      return this
-    },
-  }
-  assert.doesNotThrow(() => JSON.stringify(Schema.encodeSync(RouterError)(RouterError.cases.MiddlewareFailed.make({ id: "test", cause: circular }))))
+	const cause = new Error("startup failed", { cause: new Error("internal details") })
+	const setupFailure = SetupError.cases.PluginStartFailed.make({ plugin: "test", cause })
+	const encodedFailure = Schema.encodeSync(SetupError)(setupFailure)
+	if (encodedFailure._tag !== "PluginStartFailed") assert.fail("Expected PluginStartFailed")
+	assert.equal((encodedFailure.cause as unknown as { message: string }).message, "startup failed")
+	assert.equal("cause" in (encodedFailure.cause as object), false)
+	assert.equal("stack" in (encodedFailure.cause as object), false)
+	const decodedFailure = Schema.decodeUnknownSync(SetupError)(encodedFailure)
+	if (decodedFailure._tag !== "PluginStartFailed") assert.fail("Expected PluginStartFailed")
+	assert.equal(decodedFailure.cause instanceof Error, true)
+	const circular = {
+		message: "bad input",
+		get self(): unknown {
+			return this
+		},
+	}
+	assert.doesNotThrow(() =>
+		JSON.stringify(
+			Schema.encodeSync(RouterError)(
+				RouterError.cases.MiddlewareFailed.make({ id: "test", cause: circular }),
+			),
+		),
+	)
 })
 
 test.effect("validates plugin, deployment, HTTP, and route declarations before startup", () =>
-  Effect.gen(function* () {
-    assert.deepEqual(Schema.encodeSync(SetupError)(yield* failure(make({ plugins: [{ id: "same" }, { id: "same" }], routes: [] }))), {
-      _tag: "DuplicateId",
-      kind: "plugin",
-      id: "same",
-    })
-    assert.deepEqual(
-      Schema.encodeSync(SetupError)(
-        yield* failure(
-          make({
-            plugins: [
-              {
-                id: "capabilities",
-                capabilities: [
-                  { id: "search", version: 1, projections: [] },
-                  { id: "search", version: 1, projections: [] },
-                ],
-              },
-            ],
-            routes: [],
-          }),
-        ),
-      ),
-      {
-        _tag: "DuplicateId",
-        kind: "capability",
-        id: "search",
-      },
-    )
-    assert.deepEqual(Schema.encodeSync(SetupError)(yield* failure(make({ plugins: [configured([deployment("one"), deployment("one")])], routes: [] }))), {
-      _tag: "DuplicateId",
-      kind: "deployment",
-      id: "one",
-    })
-    assert.equal((yield* failure(make(options([configured([deployment("one")])], ["absent"]))))._tag, "InvalidRoute")
-    assert.equal((yield* failure(make(options([configured([deployment("one")])], ["one", "one"]))))._tag, "InvalidRoute")
-    assert.equal((yield* failure(make(options([configured([deployment("one")])], ["one"], { policy: "absent" }))))._tag, "InvalidRoute")
+	Effect.gen(function* () {
+		assert.deepEqual(
+			Schema.encodeSync(SetupError)(
+				yield* failure(make({ plugins: [{ id: "same" }, { id: "same" }], routes: [] })),
+			),
+			{
+				_tag: "DuplicateId",
+				kind: "plugin",
+				id: "same",
+			},
+		)
+		assert.deepEqual(
+			Schema.encodeSync(SetupError)(
+				yield* failure(
+					make({
+						plugins: [
+							{
+								id: "capabilities",
+								capabilities: [
+									{ id: "search", version: 1, projections: [] },
+									{ id: "search", version: 1, projections: [] },
+								],
+							},
+						],
+						routes: [],
+					}),
+				),
+			),
+			{
+				_tag: "DuplicateId",
+				kind: "capability",
+				id: "search",
+			},
+		)
+		assert.deepEqual(
+			Schema.encodeSync(SetupError)(
+				yield* failure(
+					make({
+						plugins: [configured([deployment("one"), deployment("one")])],
+						routes: [],
+					}),
+				),
+			),
+			{
+				_tag: "DuplicateId",
+				kind: "deployment",
+				id: "one",
+			},
+		)
+		assert.equal(
+			(yield* failure(make(options([configured([deployment("one")])], ["absent"]))))._tag,
+			"InvalidRoute",
+		)
+		assert.equal(
+			(yield* failure(make(options([configured([deployment("one")])], ["one", "one"]))))._tag,
+			"InvalidRoute",
+		)
+		assert.equal(
+			(yield* failure(
+				make(options([configured([deployment("one")])], ["one"], { policy: "absent" })),
+			))._tag,
+			"InvalidRoute",
+		)
 
-    const fragment = (id: string, path: `/${string}`) => HttpApi.make(id).add(HttpApiGroup.make(id).add(HttpApiEndpoint.post("send", path)))
-    const a = { id: "a", http: { api: fragment("a", "/same"), routes: () => Layer.empty } }
-    const b = { id: "b", http: { api: fragment("b", "/same"), routes: () => Layer.empty } }
-    assert.deepEqual(Schema.encodeSync(SetupError)(yield* failure(make({ plugins: [a, b], routes: [] }))), {
-      _tag: "DuplicateHttpRoute",
-      method: "POST",
-      path: "/same",
-    })
-    const duplicateGroup = { id: "other", http: { api: fragment("a", "/other"), routes: () => Layer.empty } }
-    assert.deepEqual(Schema.encodeSync(SetupError)(yield* failure(make({ plugins: [a, duplicateGroup], routes: [] }))), {
-      _tag: "DuplicateId",
-      kind: "http_group",
-      id: "a",
-    })
-  }),
+		const fragment = (id: string, path: `/${string}`) =>
+			HttpApi.make(id).add(HttpApiGroup.make(id).add(HttpApiEndpoint.post("send", path)))
+		const a = { id: "a", http: { api: fragment("a", "/same"), routes: () => Layer.empty } }
+		const b = { id: "b", http: { api: fragment("b", "/same"), routes: () => Layer.empty } }
+		assert.deepEqual(
+			Schema.encodeSync(SetupError)(yield* failure(make({ plugins: [a, b], routes: [] }))),
+			{
+				_tag: "DuplicateHttpRoute",
+				method: "POST",
+				path: "/same",
+			},
+		)
+		const duplicateGroup = {
+			id: "other",
+			http: { api: fragment("a", "/other"), routes: () => Layer.empty },
+		}
+		assert.deepEqual(
+			Schema.encodeSync(SetupError)(
+				yield* failure(make({ plugins: [a, duplicateGroup], routes: [] })),
+			),
+			{
+				_tag: "DuplicateId",
+				kind: "http_group",
+				id: "a",
+			},
+		)
+	}),
 )
 
-test.effect("ranks candidates, changes the private model, and composes middleware in declared order", () =>
-  Effect.gen(function* () {
-    const trace = yield* Ref.make<readonly string[]>([])
-    const executor =
-      (name: string): GenerationExecutor =>
-      (request) =>
-        Ref.update(trace, (entries) => [...entries, name + ":" + request.model]).pipe(Effect.as(Stream.succeed(finished(request.model))))
-    const wrap = (name: string): Middleware => ({
-      id: name,
-      wrap: (next) => (command, invocation) =>
-        Ref.update(trace, (entries) => [...entries, name + ":before"]).pipe(
-          Effect.flatMap(() => next(command, invocation)),
-          Effect.tap(() => Ref.update(trace, (entries) => [...entries, name + ":after"])),
-        ),
-    })
-    const plugin = configured([deployment("first", executor("first")), deployment("second", executor("second"))], {
-      policies: [{ id: "reverse", rank: (_request, candidates) => Effect.succeed([...candidates].reverse()) }],
-      middleware: [wrap("outer"), wrap("inner")],
-    })
-    const result = yield* Effect.scoped(
-      Effect.gen(function* () {
-        const router = yield* make(options([plugin], ["first", "second"], { policy: "reverse" }))
-        const execution = yield* router.invoke({ type: "generation", request: { model: "chat", input: [] } })
-        if (execution.type !== "generation") return yield* Effect.fail(new Error("Expected generation execution"))
-        return yield* completeGeneration(execution.events)
-      }),
-    )
-    assert.equal(result.model, "second-private")
-    assert.deepEqual(yield* Ref.get(trace), ["outer:before", "inner:before", "second:second-private", "inner:after", "outer:after"])
-  }),
+test.effect(
+	"ranks candidates, changes the private model, and composes middleware in declared order",
+	() =>
+		Effect.gen(function* () {
+			const trace = yield* Ref.make<readonly string[]>([])
+			const executor =
+				(name: string): GenerationExecutor =>
+				(request) =>
+					Ref.update(trace, (entries) => [...entries, name + ":" + request.model]).pipe(
+						Effect.as(Stream.succeed(finished(request.model))),
+					)
+			const wrap = (name: string): Middleware => ({
+				id: name,
+				wrap: (next) => (command, invocation) =>
+					Ref.update(trace, (entries) => [...entries, name + ":before"]).pipe(
+						Effect.flatMap(() => next(command, invocation)),
+						Effect.tap(() =>
+							Ref.update(trace, (entries) => [...entries, name + ":after"]),
+						),
+					),
+			})
+			const plugin = configured(
+				[deployment("first", executor("first")), deployment("second", executor("second"))],
+				{
+					policies: [
+						{
+							id: "reverse",
+							rank: (_request, candidates) =>
+								Effect.succeed([...candidates].reverse()),
+						},
+					],
+					middleware: [wrap("outer"), wrap("inner")],
+				},
+			)
+			const result = yield* Effect.scoped(
+				Effect.gen(function* () {
+					const router = yield* make(
+						options([plugin], ["first", "second"], { policy: "reverse" }),
+					)
+					const execution = yield* router.invoke({
+						type: "generation",
+						request: { model: "chat", input: [] },
+					})
+					if (execution.type !== "generation")
+						return yield* Effect.fail(new Error("Expected generation execution"))
+					return yield* completeGeneration(execution.events)
+				}),
+			)
+			assert.equal(result.model, "second-private")
+			assert.deepEqual(yield* Ref.get(trace), [
+				"outer:before",
+				"inner:before",
+				"second:second-private",
+				"inner:after",
+				"outer:after",
+			])
+		}),
 )
 
 test.effect("direct pipelines remain lazy and preserve opaque protocol fields", () =>
-  Effect.gen(function* () {
-    const trace = yield* Ref.make<readonly string[]>([])
-    const direct: DirectPipeline = {
-      id: "native:direct",
-      deployment: "native",
-      source: "test.native",
-      target: "test.native",
-      execute: (request) => Ref.update(trace, (entries) => [...entries, `execute:${request.targetModel}:${String((request.body as { readonly marker?: string }).marker)}`]).pipe(Effect.as({ status: 200, headers: { "content-type": "application/json" }, body: Stream.succeed(new TextEncoder().encode("native")) })),
-    }
-    const configuredNative: Deployment = {
-      ...deployment("native"),
-      protocol: "test.native",
-      execute: { http: (_request) => Effect.succeed(Stream.make(created, finished())) },
-    }
-    const router = yield* Effect.scoped(make(options([configured([configuredNative], { pipelines: [direct] })], ["native"])))
-    assert.deepEqual(yield* Ref.get(trace), [])
-    const opened = router.invoke({ type: "protocol", request: { protocol: "test.native", model: "chat", body: { marker: "kept" }, headers: {} } })
-    assert.deepEqual(yield* Ref.get(trace), [])
-    const result = yield* opened
-    assert.equal(result.type, "opaque")
-    assert.deepEqual(yield* Ref.get(trace), ["execute:native-private:kept"])
-  }),
+	Effect.gen(function* () {
+		const trace = yield* Ref.make<readonly string[]>([])
+		const direct: DirectPipeline = {
+			id: "native:direct",
+			deployment: "native",
+			source: "test.native",
+			target: "test.native",
+			execute: (request) =>
+				Ref.update(trace, (entries) => [
+					...entries,
+					`execute:${request.targetModel}:${String((request.body as { readonly marker?: string }).marker)}`,
+				]).pipe(
+					Effect.as({
+						status: 200,
+						headers: { "content-type": "application/json" },
+						body: Stream.succeed(new TextEncoder().encode("native")),
+					}),
+				),
+		}
+		const configuredNative: Deployment = {
+			...deployment("native"),
+			protocol: "test.native",
+			execute: { http: (_request) => Effect.succeed(Stream.make(created, finished())) },
+		}
+		const router = yield* Effect.scoped(
+			make(options([configured([configuredNative], { pipelines: [direct] })], ["native"])),
+		)
+		assert.deepEqual(yield* Ref.get(trace), [])
+		const opened = router.invoke({
+			type: "protocol",
+			request: {
+				protocol: "test.native",
+				model: "chat",
+				body: { marker: "kept" },
+				headers: {},
+			},
+		})
+		assert.deepEqual(yield* Ref.get(trace), [])
+		const result = yield* opened
+		assert.equal(result.type, "opaque")
+		assert.deepEqual(yield* Ref.get(trace), ["execute:native-private:kept"])
+	}),
 )
 
 test.effect("rejects invalid policy output and unsupported required transport", () =>
-  Effect.gen(function* () {
-    const plugin = configured([deployment("one")], {
-      policies: [{ id: "invalid", rank: () => Effect.succeed([{ id: "foreign", provider: "other", model: "other" }]) }],
-    })
-    const ranked = yield* Effect.scoped(
-      Effect.gen(function* () {
-        const router = yield* make(options([plugin], ["one"], { policy: "invalid" }))
-        return yield* Effect.flip(router.invoke({ type: "generation", request: { model: "chat" } }))
-      }),
-    )
-    assert.equal(ranked._tag, "RoutingFailed")
-    const unsupported = yield* Effect.scoped(
-      Effect.gen(function* () {
-        const router = yield* make(options([plugin], ["one"]))
-        return yield* Effect.flip(router.invoke({ type: "generation", request: { model: "chat" } }, { upstream: { transport: "websocket", mode: "require" } }))
-      }),
-    )
-    assert.deepEqual(Schema.encodeSync(RouterError)(unsupported), { _tag: "UnsupportedCapability", model: "chat", capability: "websocket" })
-    const preferred = yield* Effect.scoped(
-      Effect.gen(function* () {
-        const router = yield* make(options([plugin], ["one"]))
-        const execution = yield* router.invoke({ type: "generation", request: { model: "chat" } }, { upstream: { transport: "websocket", mode: "prefer" } })
-        if (execution.type !== "generation") return yield* Effect.fail(new Error("Expected generation execution"))
-        return yield* completeGeneration(execution.events)
-      }),
-    )
-    assert.equal(preferred.model, "private")
-  }),
+	Effect.gen(function* () {
+		const plugin = configured([deployment("one")], {
+			policies: [
+				{
+					id: "invalid",
+					rank: () =>
+						Effect.succeed([{ id: "foreign", provider: "other", model: "other" }]),
+				},
+			],
+		})
+		const ranked = yield* Effect.scoped(
+			Effect.gen(function* () {
+				const router = yield* make(options([plugin], ["one"], { policy: "invalid" }))
+				return yield* Effect.flip(
+					router.invoke({ type: "generation", request: { model: "chat" } }),
+				)
+			}),
+		)
+		assert.equal(ranked._tag, "RoutingFailed")
+		const unsupported = yield* Effect.scoped(
+			Effect.gen(function* () {
+				const router = yield* make(options([plugin], ["one"]))
+				return yield* Effect.flip(
+					router.invoke(
+						{ type: "generation", request: { model: "chat" } },
+						{ upstream: { transport: "websocket", mode: "require" } },
+					),
+				)
+			}),
+		)
+		assert.deepEqual(Schema.encodeSync(RouterError)(unsupported), {
+			_tag: "UnsupportedCapability",
+			model: "chat",
+			capability: "websocket",
+		})
+		const preferred = yield* Effect.scoped(
+			Effect.gen(function* () {
+				const router = yield* make(options([plugin], ["one"]))
+				const execution = yield* router.invoke(
+					{ type: "generation", request: { model: "chat" } },
+					{ upstream: { transport: "websocket", mode: "prefer" } },
+				)
+				if (execution.type !== "generation")
+					return yield* Effect.fail(new Error("Expected generation execution"))
+				return yield* completeGeneration(execution.events)
+			}),
+		)
+		assert.equal(preferred.model, "private")
+	}),
 )
 
 test.effect("falls back only before the first event and only for retryable failures", () =>
-  Effect.gen(function* () {
-    yield* Effect.forEach([() => Effect.fail(providerError), () => Effect.succeed(Stream.fail(providerError))], (first) =>
-      Effect.gen(function* () {
-        const calls = yield* Ref.make(0)
-        const secondary = deployment("next", () => Ref.update(calls, (count) => count + 1).pipe(Effect.as(Stream.succeed(finished()))))
-        const response = yield* Effect.scoped(
-          Effect.gen(function* () {
-            const router = yield* make(options([configured([deployment("primary", first), secondary])], ["primary", "next"]))
-            const execution = yield* router.invoke({ type: "generation", request: { model: "chat" } })
-            if (execution.type !== "generation") return yield* Effect.fail(new Error("Expected generation execution"))
-            return yield* completeGeneration(execution.events)
-          }),
-        )
-        assert.equal(response.id, "resp_1")
-        assert.equal(yield* Ref.get(calls), 1)
-      }),
-    )
-    const calls = yield* Ref.make(0)
-    const first = deployment("primary", () => Effect.succeed(Stream.succeed(created).pipe(Stream.concat(Stream.fail(providerError)))))
-    const second = deployment("next", () => Ref.update(calls, (count) => count + 1).pipe(Effect.as(Stream.succeed(finished()))))
-    const caught = yield* Effect.scoped(
-      Effect.gen(function* () {
-        const router = yield* make(options([configured([first, second])], ["primary", "next"]))
-        const execution = yield* router.invoke({ type: "generation", request: { model: "chat" } })
-        if (execution.type !== "generation") return yield* Effect.fail(new Error("Expected generation execution"))
-        return yield* Effect.flip(Stream.runCollect(execution.events))
-      }),
-    )
-    assert.equal(caught._tag, "ProviderFailed")
-    assert.equal(yield* Ref.get(calls), 0)
-    const notRetryable = yield* Effect.scoped(
-      Effect.gen(function* () {
-        const router = yield* make(options([configured([deployment("primary", () => Effect.fail(ProviderError.make({ kind: providerError.kind, message: providerError.message, retryable: false }))), second])], ["primary", "next"]))
-        return yield* Effect.flip(router.invoke({ type: "generation", request: { model: "chat" } }))
-      }),
-    )
-    assert.equal(notRetryable._tag, "ProviderFailed")
-    assert.equal(yield* Ref.get(calls), 0)
-  }),
+	Effect.gen(function* () {
+		yield* Effect.forEach(
+			[() => Effect.fail(providerError), () => Effect.succeed(Stream.fail(providerError))],
+			(first) =>
+				Effect.gen(function* () {
+					const calls = yield* Ref.make(0)
+					const secondary = deployment("next", () =>
+						Ref.update(calls, (count) => count + 1).pipe(
+							Effect.as(Stream.succeed(finished())),
+						),
+					)
+					const response = yield* Effect.scoped(
+						Effect.gen(function* () {
+							const router = yield* make(
+								options(
+									[configured([deployment("primary", first), secondary])],
+									["primary", "next"],
+								),
+							)
+							const execution = yield* router.invoke({
+								type: "generation",
+								request: { model: "chat" },
+							})
+							if (execution.type !== "generation")
+								return yield* Effect.fail(
+									new Error("Expected generation execution"),
+								)
+							return yield* completeGeneration(execution.events)
+						}),
+					)
+					assert.equal(response.id, "resp_1")
+					assert.equal(yield* Ref.get(calls), 1)
+				}),
+		)
+		const calls = yield* Ref.make(0)
+		const first = deployment("primary", () =>
+			Effect.succeed(Stream.succeed(created).pipe(Stream.concat(Stream.fail(providerError)))),
+		)
+		const second = deployment("next", () =>
+			Ref.update(calls, (count) => count + 1).pipe(Effect.as(Stream.succeed(finished()))),
+		)
+		const caught = yield* Effect.scoped(
+			Effect.gen(function* () {
+				const router = yield* make(
+					options([configured([first, second])], ["primary", "next"]),
+				)
+				const execution = yield* router.invoke({
+					type: "generation",
+					request: { model: "chat" },
+				})
+				if (execution.type !== "generation")
+					return yield* Effect.fail(new Error("Expected generation execution"))
+				return yield* Effect.flip(Stream.runCollect(execution.events))
+			}),
+		)
+		assert.equal(caught._tag, "ProviderFailed")
+		assert.equal(yield* Ref.get(calls), 0)
+		const notRetryable = yield* Effect.scoped(
+			Effect.gen(function* () {
+				const router = yield* make(
+					options(
+						[
+							configured([
+								deployment("primary", () =>
+									Effect.fail(
+										ProviderError.make({
+											kind: providerError.kind,
+											message: providerError.message,
+											retryable: false,
+										}),
+									),
+								),
+								second,
+							]),
+						],
+						["primary", "next"],
+					),
+				)
+				return yield* Effect.flip(
+					router.invoke({ type: "generation", request: { model: "chat" } }),
+				)
+			}),
+		)
+		assert.equal(notRetryable._tag, "ProviderFailed")
+		assert.equal(yield* Ref.get(calls), 0)
+	}),
 )
 
-test.effect("requires one terminal snapshot and releases plugin resources on completion or failed startup", () =>
-  Effect.gen(function* () {
-    yield* Effect.forEach([Stream.empty, Stream.make(finished(), created)], (events) =>
-      Effect.gen(function* () {
-        const error = yield* Effect.scoped(
-          Effect.gen(function* () {
-            const router = yield* make(options([configured([deployment("one", () => Effect.succeed(events))])], ["one"]))
-            const execution = yield* router.invoke({ type: "generation", request: { model: "chat" } })
-            if (execution.type !== "generation") return yield* Effect.fail(new Error("Expected generation execution"))
-            return yield* Effect.flip(completeGeneration(execution.events))
-          }),
-        )
-        assert.equal(error._tag, "InvalidResponse")
-      }),
-    )
-    const released = yield* Ref.make(0)
-    const audit = {
-      id: "audit",
-      start: () => Effect.addFinalizer(() => Ref.update(released, (count) => count + 1)),
-    }
-    yield* Effect.scoped(make({ plugins: [audit], routes: [] }))
-    assert.equal(yield* Ref.get(released), 1)
-    const failing: RouterPlugin = {
-      id: "fail",
-      start: () => Effect.fail(SetupError.cases.InvalidRoute.make({ model: "x", message: "fail" })),
-    }
-    assert.equal((yield* failure(make({ plugins: [audit, failing], routes: [] })))._tag, "PluginStartFailed")
-    assert.equal(yield* Ref.get(released), 2)
-  }),
+test.effect(
+	"requires one terminal snapshot and releases plugin resources on completion or failed startup",
+	() =>
+		Effect.gen(function* () {
+			yield* Effect.forEach([Stream.empty, Stream.make(finished(), created)], (events) =>
+				Effect.gen(function* () {
+					const error = yield* Effect.scoped(
+						Effect.gen(function* () {
+							const router = yield* make(
+								options(
+									[configured([deployment("one", () => Effect.succeed(events))])],
+									["one"],
+								),
+							)
+							const execution = yield* router.invoke({
+								type: "generation",
+								request: { model: "chat" },
+							})
+							if (execution.type !== "generation")
+								return yield* Effect.fail(
+									new Error("Expected generation execution"),
+								)
+							return yield* Effect.flip(completeGeneration(execution.events))
+						}),
+					)
+					assert.equal(error._tag, "InvalidResponse")
+				}),
+			)
+			const released = yield* Ref.make(0)
+			const audit = {
+				id: "audit",
+				start: () => Effect.addFinalizer(() => Ref.update(released, (count) => count + 1)),
+			}
+			yield* Effect.scoped(make({ plugins: [audit], routes: [] }))
+			assert.equal(yield* Ref.get(released), 1)
+			const failing: RouterPlugin = {
+				id: "fail",
+				start: () =>
+					Effect.fail(
+						SetupError.cases.InvalidRoute.make({ model: "x", message: "fail" }),
+					),
+			}
+			assert.equal(
+				(yield* failure(make({ plugins: [audit, failing], routes: [] })))._tag,
+				"PluginStartFailed",
+			)
+			assert.equal(yield* Ref.get(released), 2)
+		}),
 )
 
 test.effect("interrupting a suspended stream closes its finalizer and the router scope", () =>
-  Effect.gen(function* () {
-    const started = yield* Deferred.make<void>()
-    const streamReleased = yield* Ref.make(0)
-    const pluginReleased = yield* Ref.make(0)
-    const hanging = deployment("hold", () =>
-      Effect.succeed(
-        Stream.fromEffect(Deferred.succeed(started, void 0)).pipe(
-          Stream.flatMap(() => Stream.never),
-          Stream.ensuring(Ref.update(streamReleased, (count) => count + 1)),
-        ),
-      ),
-    )
-    const audit: RouterPlugin = {
-      id: "audit",
-      start: () => Effect.addFinalizer(() => Ref.update(pluginReleased, (count) => count + 1)),
-    }
-    yield* Effect.scoped(
-      Effect.gen(function* () {
-        const router = yield* make(options([audit, configured([hanging])], ["hold"]))
-        const execution = yield* router.invoke({ type: "generation", request: { model: "chat" } })
-        if (execution.type !== "generation") return yield* Effect.fail(new Error("Expected generation execution"))
-        const fiber = yield* Effect.forkChild(Stream.runDrain(execution.events))
-        yield* Deferred.await(started)
-        yield* execution.cancel
-        yield* Fiber.await(fiber)
-        assert.equal(yield* Ref.get(streamReleased), 1)
-      }),
-    )
-    assert.equal(yield* Ref.get(pluginReleased), 1)
-  }),
+	Effect.gen(function* () {
+		const started = yield* Deferred.make<void>()
+		const streamReleased = yield* Ref.make(0)
+		const pluginReleased = yield* Ref.make(0)
+		const hanging = deployment("hold", () =>
+			Effect.succeed(
+				Stream.fromEffect(Deferred.succeed(started, void 0)).pipe(
+					Stream.flatMap(() => Stream.never),
+					Stream.ensuring(Ref.update(streamReleased, (count) => count + 1)),
+				),
+			),
+		)
+		const audit: RouterPlugin = {
+			id: "audit",
+			start: () =>
+				Effect.addFinalizer(() => Ref.update(pluginReleased, (count) => count + 1)),
+		}
+		yield* Effect.scoped(
+			Effect.gen(function* () {
+				const router = yield* make(options([audit, configured([hanging])], ["hold"]))
+				const execution = yield* router.invoke({
+					type: "generation",
+					request: { model: "chat" },
+				})
+				if (execution.type !== "generation")
+					return yield* Effect.fail(new Error("Expected generation execution"))
+				const fiber = yield* Effect.forkChild(Stream.runDrain(execution.events))
+				yield* Deferred.await(started)
+				yield* execution.cancel
+				yield* Fiber.await(fiber)
+				assert.equal(yield* Ref.get(streamReleased), 1)
+			}),
+		)
+		assert.equal(yield* Ref.get(pluginReleased), 1)
+	}),
+)
+
+test.effect("enforces continuation and selects preferred upstream transports", () =>
+	Effect.gen(function* () {
+		const calls = yield* Ref.make<readonly string[]>([])
+		const transport =
+			(name: string): GenerationExecutor =>
+			(request) =>
+				Ref.update(calls, (entries) => [...entries, name + ":" + request.model]).pipe(
+					Effect.as(Stream.succeed(finished(request.model))),
+				)
+		const dual = {
+			...deployment("dual"),
+			execute: { http: transport("http"), websocket: transport("websocket") },
+		}
+		const router = yield* Effect.scoped(make(options([configured([dual])], ["dual"])))
+		const preferred = yield* router.invoke(
+			{ type: "generation", request: { model: "chat" } },
+			{ upstream: { transport: "websocket", mode: "prefer" } },
+		)
+		if (preferred.type !== "generation")
+			return yield* Effect.fail(new Error("Expected generation execution"))
+		yield* completeGeneration(preferred.events)
+		assert.deepEqual(yield* Ref.get(calls), ["websocket:dual-private"])
+
+		const required = yield* router.invoke(
+			{ type: "generation", request: { model: "chat" } },
+			{ upstream: { transport: "http", mode: "require" } },
+		)
+		if (required.type !== "generation")
+			return yield* Effect.fail(new Error("Expected generation execution"))
+		yield* completeGeneration(required.events)
+		assert.deepEqual(yield* Ref.get(calls), ["websocket:dual-private", "http:dual-private"])
+
+		const multi = yield* Effect.scoped(
+			make(options([configured([deployment("one"), deployment("two")])], ["one", "two"])),
+		)
+		const continuation = yield* Effect.flip(
+			multi.invoke({
+				type: "generation",
+				request: { model: "chat", previous_response_id: "resp_previous" },
+			}),
+		)
+		assert.equal(continuation._tag, "UnsupportedCapability")
+	}),
+)
+
+test.effect("maps policy failures and empty policy rankings to typed router errors", () =>
+	Effect.gen(function* () {
+		const policyFailure = yield* Effect.scoped(
+			Effect.flip(
+				make(
+					options(
+						[
+							configured([deployment("one")], {
+								policies: [
+									{
+										id: "fail",
+										rank: () =>
+											Effect.fail(RoutingError.make({ message: "failed" })),
+									},
+								],
+							}),
+						],
+						["one"],
+						{ policy: "fail" },
+					),
+				).pipe(
+					Effect.flatMap((router) =>
+						router.invoke({ type: "generation", request: { model: "chat" } }),
+					),
+				),
+			),
+		)
+		assert.equal(policyFailure._tag, "RoutingFailed")
+		const empty = yield* Effect.scoped(
+			Effect.flip(
+				make(
+					options(
+						[
+							configured([deployment("one")], {
+								policies: [{ id: "empty", rank: () => Effect.succeed([]) }],
+							}),
+						],
+						["one"],
+						{ policy: "empty" },
+					),
+				).pipe(
+					Effect.flatMap((router) =>
+						router.invoke({ type: "generation", request: { model: "chat" } }),
+					),
+				),
+			),
+		)
+		assert.equal(empty._tag, "NoAvailableDeployment")
+	}),
 )

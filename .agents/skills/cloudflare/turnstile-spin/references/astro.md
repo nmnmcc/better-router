@@ -44,35 +44,40 @@ The `PUBLIC_` prefix is mandatory for client-exposed variables in Astro. The sec
 import type { APIRoute } from "astro"
 
 const expectedHostnames = new Set(
-  (import.meta.env.TURNSTILE_HOSTNAMES ?? "")
-    .split(",")
-    .map((h) => h.trim())
-    .filter(Boolean),
+	(import.meta.env.TURNSTILE_HOSTNAMES ?? "")
+		.split(",")
+		.map((h) => h.trim())
+		.filter(Boolean),
 )
 
 export const POST: APIRoute = async ({ request, clientAddress }) => {
-  const form = await request.formData()
-  const token = form.get("cf-turnstile-response")
-  if (typeof token !== "string" || expectedHostnames.size === 0) {
-    return new Response("forbidden", { status: 403 })
-  }
+	const form = await request.formData()
+	const token = form.get("cf-turnstile-response")
+	if (typeof token !== "string" || expectedHostnames.size === 0) {
+		return new Response("forbidden", { status: 403 })
+	}
 
-  const verify = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      secret: import.meta.env.TURNSTILE_SECRET,
-      response: token,
-      remoteip: clientAddress,
-    }),
-  })
-  const result = await verify.json()
-  if (verify.ok !== true || result.success !== true || result.action !== "signup" || !expectedHostnames.has(result.hostname)) {
-    return new Response("forbidden", { status: 403 })
-  }
+	const verify = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({
+			secret: import.meta.env.TURNSTILE_SECRET,
+			response: token,
+			remoteip: clientAddress,
+		}),
+	})
+	const result = await verify.json()
+	if (
+		verify.ok !== true ||
+		result.success !== true ||
+		result.action !== "signup" ||
+		!expectedHostnames.has(result.hostname)
+	) {
+		return new Response("forbidden", { status: 403 })
+	}
 
-  // process signup
-  return Response.json({ ok: true })
+	// process signup
+	return Response.json({ ok: true })
 }
 ```
 
@@ -85,37 +90,45 @@ import { defineAction } from "astro:actions"
 import { z } from "astro:schema"
 
 const expectedHostnames = new Set(
-  (import.meta.env.TURNSTILE_HOSTNAMES ?? "")
-    .split(",")
-    .map((h) => h.trim())
-    .filter(Boolean),
+	(import.meta.env.TURNSTILE_HOSTNAMES ?? "")
+		.split(",")
+		.map((h) => h.trim())
+		.filter(Boolean),
 )
 
 export const server = {
-  signup: defineAction({
-    accept: "form",
-    input: z.object({
-      email: z.string().email(),
-      "cf-turnstile-response": z.string(),
-    }),
-    handler: async (input, ctx) => {
-      if (expectedHostnames.size === 0) throw new Error("Verification failed")
-      const verify = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          secret: import.meta.env.TURNSTILE_SECRET,
-          response: input["cf-turnstile-response"],
-          remoteip: ctx.clientAddress,
-        }),
-      })
-      const result = await verify.json()
-      if (verify.ok !== true || result.success !== true || result.action !== "signup" || !expectedHostnames.has(result.hostname)) {
-        throw new Error("Verification failed")
-      }
-      // process signup
-    },
-  }),
+	signup: defineAction({
+		accept: "form",
+		input: z.object({
+			email: z.string().email(),
+			"cf-turnstile-response": z.string(),
+		}),
+		handler: async (input, ctx) => {
+			if (expectedHostnames.size === 0) throw new Error("Verification failed")
+			const verify = await fetch(
+				"https://challenges.cloudflare.com/turnstile/v0/siteverify",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/x-www-form-urlencoded" },
+					body: new URLSearchParams({
+						secret: import.meta.env.TURNSTILE_SECRET,
+						response: input["cf-turnstile-response"],
+						remoteip: ctx.clientAddress,
+					}),
+				},
+			)
+			const result = await verify.json()
+			if (
+				verify.ok !== true ||
+				result.success !== true ||
+				result.action !== "signup" ||
+				!expectedHostnames.has(result.hostname)
+			) {
+				throw new Error("Verification failed")
+			}
+			// process signup
+		},
+	}),
 }
 ```
 

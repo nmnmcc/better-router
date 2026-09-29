@@ -57,7 +57,7 @@ Alternative scenarios:
 
 ```jsonc
 {
-  "analytics_engine_datasets": [{ "binding": "ANALYTICS", "dataset": "my_events" }],
+	"analytics_engine_datasets": [{ "binding": "ANALYTICS", "dataset": "my_events" }],
 }
 ```
 
@@ -65,9 +65,9 @@ Alternative scenarios:
 
 ```typescript
 env.ANALYTICS.writeDataPoint({
-  blobs: ["/api/users", "GET", "200"],
-  doubles: [145.2, 1], // latency_ms, count
-  indexes: [customerId],
+	blobs: ["/api/users", "GET", "200"],
+	doubles: [145.2, 1], // latency_ms, count
+	indexes: [customerId],
 })
 ```
 

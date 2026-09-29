@@ -75,24 +75,26 @@ import { AiError, LanguageModel } from "effect/unstable/ai"
 import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai"
 
 const OpenAiClientLayer = OpenAiClient.layerConfig({
-  apiKey: Config.Redacted("OPENAI_API_KEY"),
+	apiKey: Config.Redacted("OPENAI_API_KEY"),
 }).pipe(Layer.provide(FetchHttpClient.layer))
 
 const Answer = Schema.Struct({
-  answer: Schema.String,
-  confidence: Schema.Number,
+	answer: Schema.String,
+	confidence: Schema.Number,
 })
 
 const ModelLayer = OpenAiLanguageModel.model("gpt-5.2").pipe(Layer.provide(OpenAiClientLayer))
 
 const program = LanguageModel.generateObject({
-  objectName: "answer",
-  prompt: "Summarize the incident and give a confidence from 0 to 1",
-  schema: Answer,
+	objectName: "answer",
+	prompt: "Summarize the incident and give a confidence from 0 to 1",
+	schema: Answer,
 }).pipe(
-  Effect.map((response) => response.value),
-  Effect.catchTag("AiError", (error: AiError.AiError) => Effect.fail(new Error(`AI request failed: ${error.reason._tag}`))),
-  Effect.provide(ModelLayer),
+	Effect.map((response) => response.value),
+	Effect.catchTag("AiError", (error: AiError.AiError) =>
+		Effect.fail(new Error(`AI request failed: ${error.reason._tag}`)),
+	),
+	Effect.provide(ModelLayer),
 )
 ```
 
@@ -108,30 +110,30 @@ import { Effect, Schema, Stream } from "effect"
 import { LanguageModel, Response, Tool, Toolkit } from "effect/unstable/ai"
 
 const Lookup = Tool.make("Lookup", {
-  description: "Look up a product by its stable id",
-  parameters: Schema.Struct({ id: Schema.String }),
-  success: Schema.Struct({ id: Schema.String, stock: Schema.Number }),
-  failure: Schema.Struct({ message: Schema.String }),
-  failureMode: "return",
+	description: "Look up a product by its stable id",
+	parameters: Schema.Struct({ id: Schema.String }),
+	success: Schema.Struct({ id: Schema.String, stock: Schema.Number }),
+	failure: Schema.Struct({ message: Schema.String }),
+	failureMode: "return",
 })
 
 const Products = Toolkit.make(Lookup)
 const ProductsLayer = Products.toLayer({
-  Lookup: ({ id }) => Effect.succeed({ id, stock: 3 }),
+	Lookup: ({ id }) => Effect.succeed({ id, stock: 3 }),
 })
 
 const response = LanguageModel.generateText({
-  prompt: "Check product p-42 and explain whether it is in stock",
-  toolkit: Products,
-  toolChoice: "auto",
-  concurrency: 4,
+	prompt: "Check product p-42 and explain whether it is in stock",
+	toolkit: Products,
+	toolChoice: "auto",
+	concurrency: 4,
 }).pipe(Effect.provide(ProductsLayer))
 
 const textStream = LanguageModel.streamText({
-  prompt: "Write three release highlights",
+	prompt: "Write three release highlights",
 }).pipe(
-  Stream.filter((part): part is Response.TextDeltaPart => part.type === "text-delta"),
-  Stream.map((part) => part.delta),
+	Stream.filter((part): part is Response.TextDeltaPart => part.type === "text-delta"),
+	Stream.map((part) => part.delta),
 )
 ```
 

@@ -111,7 +111,7 @@ const result = await process.output({ encoding: "utf8" })
 
 ```ts
 const server = await sandbox.exec(["/bin/bash", "-lc", "npm run dev"], {
-  cwd: "/workspace/app",
+	cwd: "/workspace/app",
 })
 await server.waitForPort(3000, { timeout: 60_000 })
 await server.kill() // numeric; default 15
@@ -133,16 +133,19 @@ import { Sandbox as BaseSandbox } from "@cloudflare/sandbox"
 import { withInterpreter } from "@cloudflare/sandbox/interpreter"
 
 export class Sandbox extends BaseSandbox<Env> {
-  interpreter = withInterpreter(this)
+	interpreter = withInterpreter(this)
 }
 ```
 
 **Git (shape):**
 
 ```ts
-const clone = await sandbox.exec(["git", "clone", "--depth", "1", "--", repoUrl, "/workspace/repo"], {
-  cwd: "/workspace",
-})
+const clone = await sandbox.exec(
+	["git", "clone", "--depth", "1", "--", repoUrl, "/workspace/repo"],
+	{
+		cwd: "/workspace",
+	},
+)
 const result = await clone.output({ encoding: "utf8" })
 ```
 

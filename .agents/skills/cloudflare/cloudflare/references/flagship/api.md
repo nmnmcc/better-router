@@ -34,12 +34,12 @@ All methods are async, never throw, and return the `defaultValue` on errors.
 type FlagshipEvaluationContext = Record<string, string | number | boolean>
 
 interface FlagshipEvaluationDetails<T> {
-  flagKey: string
-  value: T
-  variant?: string // name of the matched variation
-  reason?: string // "TARGETING_MATCH" | "DEFAULT" | "DISABLED" | "SPLIT"
-  errorCode?: string // "TYPE_MISMATCH" | "GENERAL"
-  errorMessage?: string
+	flagKey: string
+	value: T
+	variant?: string // name of the matched variation
+	reason?: string // "TARGETING_MATCH" | "DEFAULT" | "DISABLED" | "SPLIT"
+	errorCode?: string // "TYPE_MISMATCH" | "GENERAL"
+	errorMessage?: string
 }
 ```
 
@@ -47,12 +47,12 @@ interface FlagshipEvaluationDetails<T> {
 
 ```typescript
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const enabled = await env.FLAGS.getBooleanValue("new-feature", false, {
-      userId: "user-42",
-    })
-    return new Response(enabled ? "Feature on" : "Feature off")
-  },
+	async fetch(request: Request, env: Env): Promise<Response> {
+		const enabled = await env.FLAGS.getBooleanValue("new-feature", false, {
+			userId: "user-42",
+		})
+		return new Response(enabled ? "Feature on" : "Feature off")
+	},
 }
 ```
 
@@ -75,7 +75,7 @@ import { FlagshipServerProvider } from "@cloudflare/flagship"
 await OpenFeature.setProviderAndWait(new FlagshipServerProvider({ binding: env.FLAGS }))
 const client = OpenFeature.getClient()
 const enabled = await client.getBooleanValue("new-checkout", false, {
-  targetingKey: "user-42",
+	targetingKey: "user-42",
 })
 ```
 
@@ -86,15 +86,15 @@ import { OpenFeature } from "@openfeature/server-sdk"
 import { FlagshipServerProvider } from "@cloudflare/flagship"
 
 await OpenFeature.setProviderAndWait(
-  new FlagshipServerProvider({
-    appId: "<APP_ID>",
-    accountId: "<ACCOUNT_ID>",
-    authToken: "<API_TOKEN>",
-  }),
+	new FlagshipServerProvider({
+		appId: "<APP_ID>",
+		accountId: "<ACCOUNT_ID>",
+		authToken: "<API_TOKEN>",
+	}),
 )
 const client = OpenFeature.getClient()
 const enabled = await client.getBooleanValue("new-checkout", false, {
-  targetingKey: "user-42",
+	targetingKey: "user-42",
 })
 ```
 
@@ -107,12 +107,12 @@ import { OpenFeature } from "@openfeature/web-sdk"
 import { FlagshipClientProvider } from "@cloudflare/flagship"
 
 await OpenFeature.setProviderAndWait(
-  new FlagshipClientProvider({
-    appId: "<APP_ID>",
-    accountId: "<ACCOUNT_ID>",
-    authToken: "<API_TOKEN>",
-    prefetchFlags: ["promo-banner", "dark-mode"],
-  }),
+	new FlagshipClientProvider({
+		appId: "<APP_ID>",
+		accountId: "<ACCOUNT_ID>",
+		authToken: "<API_TOKEN>",
+		prefetchFlags: ["promo-banner", "dark-mode"],
+	}),
 )
 await OpenFeature.setContext({ targetingKey: "user-42", plan: "enterprise" })
 const client = OpenFeature.getClient()
@@ -214,10 +214,10 @@ Requires an API token with the `com.cloudflare.account.flagship.evaluate` permis
 
 ```json
 {
-  "flagKey": "my-flag",
-  "value": true,
-  "variant": "on",
-  "reason": "SPLIT"
+	"flagKey": "my-flag",
+	"value": true,
+	"variant": "on",
+	"reason": "SPLIT"
 }
 ```
 
@@ -231,11 +231,11 @@ Management endpoints are wrapped in the Cloudflare v4 envelope shown above. Comm
 
 ```json
 {
-  "id": "app-uuid",
-  "name": "my-app",
-  "created_at": "2026-06-09T12:00:00.000Z",
-  "updated_at": "2026-06-09T12:00:00.000Z",
-  "updated_by": "user@example.com"
+	"id": "app-uuid",
+	"name": "my-app",
+	"created_at": "2026-06-09T12:00:00.000Z",
+	"updated_at": "2026-06-09T12:00:00.000Z",
+	"updated_by": "user@example.com"
 }
 ```
 
@@ -243,15 +243,15 @@ Management endpoints are wrapped in the Cloudflare v4 envelope shown above. Comm
 
 ```json
 {
-  "key": "my-flag",
-  "type": "boolean",
-  "default_variation": "off",
-  "variations": { "on": true, "off": false },
-  "rules": [],
-  "description": "Enables the new feature",
-  "enabled": true,
-  "updated_at": "2026-06-09T12:00:00.000Z",
-  "updated_by": "user@example.com"
+	"key": "my-flag",
+	"type": "boolean",
+	"default_variation": "off",
+	"variations": { "on": true, "off": false },
+	"rules": [],
+	"description": "Enables the new feature",
+	"enabled": true,
+	"updated_at": "2026-06-09T12:00:00.000Z",
+	"updated_by": "user@example.com"
 }
 ```
 
@@ -259,16 +259,16 @@ Management endpoints are wrapped in the Cloudflare v4 envelope shown above. Comm
 
 ```json
 {
-  "flag_key": "my-flag",
-  "event": "update",
-  "after": {
-    "key": "my-flag",
-    "default_variation": "off",
-    "variations": { "on": true, "off": false },
-    "rules": [],
-    "enabled": true
-  },
-  "diff": { "enabled": { "from": false, "to": true } }
+	"flag_key": "my-flag",
+	"event": "update",
+	"after": {
+		"key": "my-flag",
+		"default_variation": "off",
+		"variations": { "on": true, "off": false },
+		"rules": [],
+		"enabled": true
+	},
+	"diff": { "enabled": { "from": false, "to": true } }
 }
 ```
 
@@ -280,29 +280,29 @@ Changelog entries include the full flag state after the change. `update` entries
 
 ```json
 {
-  "key": "my-flag",
-  "type": "boolean",
-  "default_variation": "off",
-  "variations": {
-    "on": true,
-    "off": false
-  },
-  "rules": [
-    {
-      "priority": 1,
-      "conditions": [
-        {
-          "attribute": "email",
-          "operator": "ends_with",
-          "value": "@cloudflare.com"
-        }
-      ],
-      "serve_variation": "on",
-      "rollout": { "percentage": 100 }
-    }
-  ],
-  "description": "Enables the new feature",
-  "enabled": true
+	"key": "my-flag",
+	"type": "boolean",
+	"default_variation": "off",
+	"variations": {
+		"on": true,
+		"off": false
+	},
+	"rules": [
+		{
+			"priority": 1,
+			"conditions": [
+				{
+					"attribute": "email",
+					"operator": "ends_with",
+					"value": "@cloudflare.com"
+				}
+			],
+			"serve_variation": "on",
+			"rollout": { "percentage": 100 }
+		}
+	],
+	"description": "Enables the new feature",
+	"enabled": true
 }
 ```
 
@@ -322,10 +322,10 @@ Changelog entries include the full flag state after the change. `update` entries
 
 ```json
 {
-  "priority": 1,
-  "conditions": [/* Condition[] */],
-  "serve_variation": "on",
-  "rollout": { "percentage": 50, "attribute": "targetingKey" }
+	"priority": 1,
+	"conditions": [/* Condition[] */],
+	"serve_variation": "on",
+	"rollout": { "percentage": 50, "attribute": "targetingKey" }
 }
 ```
 
@@ -346,11 +346,11 @@ Changelog entries include the full flag state after the change. `update` entries
 
 ```json
 {
-  "logical_operator": "AND",
-  "clauses": [
-    { "attribute": "country", "operator": "equals", "value": "US" },
-    { "attribute": "plan", "operator": "in", "value": ["enterprise", "business"] }
-  ]
+	"logical_operator": "AND",
+	"clauses": [
+		{ "attribute": "country", "operator": "equals", "value": "US" },
+		{ "attribute": "plan", "operator": "in", "value": ["enterprise", "business"] }
+	]
 }
 ```
 

@@ -25,11 +25,11 @@ const requests = Metric.counter("http_requests_total")
 const loadUser = (id: string) => Effect.succeed({ id, name: "Ada" })
 
 const handle = Effect.withSpan(
-  Effect.gen(function* () {
-    yield* Metric.update(requests, 1)
-    return yield* loadUser("u1")
-  }),
-  "users.get",
+	Effect.gen(function* () {
+		yield* Metric.update(requests, 1)
+		return yield* loadUser("u1")
+	}),
+	"users.get",
 )
 ```
 

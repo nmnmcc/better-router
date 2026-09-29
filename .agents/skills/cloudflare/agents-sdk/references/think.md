@@ -16,17 +16,17 @@ import { createWorkersAI } from "workers-ai-provider"
 import { routeAgentRequest } from "agents"
 
 export class MyAgent extends Think<Env> {
-  getModel() {
-    return createWorkersAI({ binding: this.env.AI })("@cf/meta/llama-4-scout-17b-16e-instruct")
-  }
+	getModel() {
+		return createWorkersAI({ binding: this.env.AI })("@cf/meta/llama-4-scout-17b-16e-instruct")
+	}
 
-  getSystemPrompt() {
-    return "You are a helpful assistant."
-  }
+	getSystemPrompt() {
+		return "You are a helpful assistant."
+	}
 }
 
 export default {
-  fetch: (req, env) => routeAgentRequest(req, env),
+	fetch: (req, env) => routeAgentRequest(req, env),
 }
 ```
 
@@ -34,12 +34,12 @@ export default {
 
 ```jsonc
 {
-  "compatibility_flags": ["nodejs_compat", "experimental"],
-  "durable_objects": {
-    "bindings": [{ "name": "MyAgent", "class_name": "MyAgent" }],
-  },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MyAgent"] }],
-  "ai": { "binding": "AI" },
+	"compatibility_flags": ["nodejs_compat", "experimental"],
+	"durable_objects": {
+		"bindings": [{ "name": "MyAgent", "class_name": "MyAgent" }],
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["MyAgent"] }],
+	"ai": { "binding": "AI" },
 }
 ```
 
@@ -52,15 +52,15 @@ import { tool } from "ai"
 import { z } from "zod"
 
 export class MyAgent extends Think<Env> {
-  getTools() {
-    return {
-      getWeather: tool({
-        description: "Get weather",
-        parameters: z.object({ city: z.string() }),
-        execute: async ({ city }) => `72°F in ${city}`,
-      }),
-    }
-  }
+	getTools() {
+		return {
+			getWeather: tool({
+				description: "Get weather",
+				parameters: z.object({ city: z.string() }),
+				execute: async ({ city }) => `72°F in ${city}`,
+			}),
+		}
+	}
 }
 ```
 
@@ -88,7 +88,7 @@ async beforeTurn(ctx: TurnContext): Promise<TurnConfig> {
 ```typescript
 const child = this.subAgent(SpecialistAgent, "specialist-1")
 await child.chat("Analyze this data...", (chunk) => {
-  // stream callback
+	// stream callback
 })
 ```
 

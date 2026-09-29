@@ -37,12 +37,15 @@ A useful private shape makes the invariant visible in its fields. It is not mere
 
 ```ts
 type NormalizedEntry = {
-  readonly kind: "message" | "function_call" | "function_result"
-  readonly payload: MessagePayload | FunctionCallPayload | FunctionResultPayload
-  readonly origin: { readonly path: string; readonly form: "string" | "parts" | "native" }
+	readonly kind: "message" | "function_call" | "function_result"
+	readonly payload: MessagePayload | FunctionCallPayload | FunctionResultPayload
+	readonly origin: { readonly path: string; readonly form: "string" | "parts" | "native" }
 }
 
-type Presence<A> = { readonly kind: "absent" } | { readonly kind: "null" } | { readonly kind: "value"; readonly value: A }
+type Presence<A> =
+	| { readonly kind: "absent" }
+	| { readonly kind: "null" }
+	| { readonly kind: "value"; readonly value: A }
 ```
 
 In real code, use a discriminated union so `payload` is narrowed together with `kind`; the sketch keeps that relationship compact. Add `Presence` only for fields whose omission, nullability, or empty value changes output or capability checks. A normalized entry should be constructible only after Schema decoding and semantic projection have proved its required fields. The final encoder is the only place that turns this shape back into provider-specific strings, arrays, records, or envelopes.

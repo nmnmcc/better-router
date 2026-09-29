@@ -25,18 +25,18 @@ curl -s "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/r2-catalog/$B
 
 ```json
 {
-  "result": {
-    "identifier": { "namespace": ["live"], "name": "earthquakes" },
-    "table_uuid": "019edccf-3ac8-73e3-...",
-    "metadata_location": "s3://live-data/__r2_data_catalog/.../metadata/01225-....metadata.json",
-    "total_snapshots": 1225,
-    "returned_snapshots": 10,
-    "metadata": {
-      /* standard Iceberg TableMetadata: schemas, partition-specs, sort-orders,
+	"result": {
+		"identifier": { "namespace": ["live"], "name": "earthquakes" },
+		"table_uuid": "019edccf-3ac8-73e3-...",
+		"metadata_location": "s3://live-data/__r2_data_catalog/.../metadata/01225-....metadata.json",
+		"total_snapshots": 1225,
+		"returned_snapshots": 10,
+		"metadata": {
+			/* standard Iceberg TableMetadata: schemas, partition-specs, sort-orders,
                    properties, current-snapshot-id, snapshots (≤10), snapshot-log, refs */
-    }
-  },
-  "success": true
+		}
+	},
+	"success": true
 }
 ```
 

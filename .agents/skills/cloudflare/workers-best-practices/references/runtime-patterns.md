@@ -108,9 +108,12 @@ Anti-pattern:
 
 ```ts
 // REST API from inside a Worker — unnecessary overhead
-const response = await fetch("https://api.cloudflare.com/client/v4/accounts/.../r2/buckets/.../objects/my-file", {
-  headers: { Authorization: `Bearer ${env.CF_API_TOKEN}` },
-})
+const response = await fetch(
+	"https://api.cloudflare.com/client/v4/accounts/.../r2/buckets/.../objects/my-file",
+	{
+		headers: { Authorization: `Bearer ${env.CF_API_TOKEN}` },
+	},
+)
 ```
 
 ### Use Queues and Workflows for async and background work
@@ -149,9 +152,9 @@ Service bindings are zero-cost, bypass the public internet, and support type-saf
 import { WorkerEntrypoint } from "cloudflare:workers"
 
 export class AuthService extends WorkerEntrypoint {
-  async verifyToken(token: string): Promise<{ userId: string; valid: boolean }> {
-    return { userId: "user-123", valid: true }
-  }
+	async verifyToken(token: string): Promise<{ userId: string; valid: boolean }> {
+		return { userId: "user-123", valid: true }
+	}
 }
 
 // Caller Worker
@@ -168,7 +171,7 @@ Hyperdrive maintains a regional connection pool, eliminating per-request TCP + T
 
 ```jsonc
 {
-  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<YOUR_HYPERDRIVE_ID>" }],
+	"hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<YOUR_HYPERDRIVE_ID>" }],
 }
 ```
 
@@ -197,11 +200,11 @@ Workers reuse isolates across requests. Module-level mutable variables cause cro
 
 ```ts
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const userId = request.headers.get("X-User-Id")
-    const result = await handleRequest(userId, env)
-    return Response.json(result)
-  },
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+		const userId = request.headers.get("X-User-Id")
+		const result = await handleRequest(userId, env)
+		return Response.json(result)
+	},
 } satisfies ExportedHandler<Env>
 ```
 
@@ -212,10 +215,10 @@ Anti-pattern:
 let currentUser: string | null = null
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    currentUser = request.headers.get("X-User-Id") // Visible to next request
-    // ...
-  },
+	async fetch(request: Request, env: Env): Promise<Response> {
+		currentUser = request.headers.get("X-User-Id") // Visible to next request
+		// ...
+	},
 }
 ```
 
@@ -227,10 +230,15 @@ A Promise that is not `await`ed, `return`ed, or passed to `ctx.waitUntil()` is a
 
 ```ts
 // Correct: await when you need the result
-const response = await fetch("https://api.example.com/process", { method: "POST", body: JSON.stringify(data) })
+const response = await fetch("https://api.example.com/process", {
+	method: "POST",
+	body: JSON.stringify(data),
+})
 
 // Correct: waitUntil when you don't need the result before responding
-ctx.waitUntil(fetch("https://api.example.com/webhook", { method: "POST", body: JSON.stringify(data) }))
+ctx.waitUntil(
+	fetch("https://api.example.com/webhook", { method: "POST", body: JSON.stringify(data) }),
+)
 ```
 
 Anti-pattern:
@@ -268,16 +276,19 @@ const sessionId = crypto.randomUUID()
 const tokenBytes = new Uint8Array(32)
 crypto.getRandomValues(tokenBytes)
 const token = Array.from(tokenBytes)
-  .map((b) => b.toString(16).padStart(2, "0"))
-  .join("")
+	.map((b) => b.toString(16).padStart(2, "0"))
+	.join("")
 ```
 
 ```ts
 // Constant-time comparison — hash first to avoid length leak
 async function verifyToken(provided: string, expected: string): Promise<boolean> {
-  const encoder = new TextEncoder()
-  const [providedHash, expectedHash] = await Promise.all([crypto.subtle.digest("SHA-256", encoder.encode(provided)), crypto.subtle.digest("SHA-256", encoder.encode(expected))])
-  return crypto.subtle.timingSafeEqual(providedHash, expectedHash)
+	const encoder = new TextEncoder()
+	const [providedHash, expectedHash] = await Promise.all([
+		crypto.subtle.digest("SHA-256", encoder.encode(provided)),
+		crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+	])
+	return crypto.subtle.timingSafeEqual(providedHash, expectedHash)
 }
 ```
 
@@ -329,16 +340,16 @@ import { describe, it, expect } from "vitest"
 import { env } from "cloudflare:test"
 
 describe("KV operations", () => {
-  it("should store and retrieve a value", async () => {
-    await env.MY_KV.put("key", "value")
-    const result = await env.MY_KV.get("key")
-    expect(result).toBe("value")
-  })
+	it("should store and retrieve a value", async () => {
+		await env.MY_KV.put("key", "value")
+		const result = await env.MY_KV.get("key")
+		expect(result).toBe("value")
+	})
 
-  it("should return null for missing keys", async () => {
-    const result = await env.MY_KV.get("nonexistent")
-    expect(result).toBeNull()
-  })
+	it("should return null for missing keys", async () => {
+		const result = await env.MY_KV.get("nonexistent")
+		expect(result).toBeNull()
+	})
 })
 ```
 

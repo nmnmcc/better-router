@@ -13,10 +13,10 @@ Schema is a JSON object with a `fields` array; each field has `name`, `type`, `r
 
 ```json
 {
-  "fields": [
-    { "name": "event_id", "type": "string", "required": true },
-    { "name": "amount", "type": "float64", "required": false }
-  ]
+	"fields": [
+		{ "name": "event_id", "type": "string", "required": true },
+		{ "name": "amount", "type": "float64", "required": false }
+	]
 }
 ```
 

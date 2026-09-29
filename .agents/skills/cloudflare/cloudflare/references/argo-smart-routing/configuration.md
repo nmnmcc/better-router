@@ -30,43 +30,43 @@ output "argo_enabled" {
 ```typescript
 // config/argo.ts
 interface ArgoEnvironmentConfig {
-  enabled: boolean
-  tieredCache: boolean
-  monitoring: {
-    usageAlerts: boolean
-    threshold: number
-  }
+	enabled: boolean
+	tieredCache: boolean
+	monitoring: {
+		usageAlerts: boolean
+		threshold: number
+	}
 }
 
 const configs: Record<string, ArgoEnvironmentConfig> = {
-  production: {
-    enabled: true,
-    tieredCache: true,
-    monitoring: {
-      usageAlerts: true,
-      threshold: 1000, // GB
-    },
-  },
-  staging: {
-    enabled: true,
-    tieredCache: false,
-    monitoring: {
-      usageAlerts: false,
-      threshold: 100, // GB
-    },
-  },
-  development: {
-    enabled: false,
-    tieredCache: false,
-    monitoring: {
-      usageAlerts: false,
-      threshold: 0,
-    },
-  },
+	production: {
+		enabled: true,
+		tieredCache: true,
+		monitoring: {
+			usageAlerts: true,
+			threshold: 1000, // GB
+		},
+	},
+	staging: {
+		enabled: true,
+		tieredCache: false,
+		monitoring: {
+			usageAlerts: false,
+			threshold: 100, // GB
+		},
+	},
+	development: {
+		enabled: false,
+		tieredCache: false,
+		monitoring: {
+			usageAlerts: false,
+			threshold: 0,
+		},
+	},
 }
 
 export function getArgoConfig(env: string): ArgoEnvironmentConfig {
-  return configs[env] || configs.development
+	return configs[env] || configs.development
 }
 ```
 
@@ -77,14 +77,14 @@ export function getArgoConfig(env: string): ArgoEnvironmentConfig {
 import * as cloudflare from "@pulumi/cloudflare"
 
 const zone = new cloudflare.Zone("example-zone", {
-  zone: "example.com",
-  plan: "enterprise",
+	zone: "example.com",
+	plan: "enterprise",
 })
 
 const argoSettings = new cloudflare.Argo("argo-config", {
-  zoneId: zone.id,
-  smartRouting: "on",
-  tieredCaching: "on",
+	zoneId: zone.id,
+	smartRouting: "on",
+	tieredCaching: "on",
 })
 
 export const argoEnabled = argoSettings.smartRouting
@@ -131,18 +131,18 @@ ARGO_TIERED_CACHE=true
 import { z } from "zod"
 
 const envSchema = z.object({
-  CLOUDFLARE_API_TOKEN: z.string().min(1),
-  CLOUDFLARE_ZONE_ID: z.string().min(1),
-  CLOUDFLARE_ACCOUNT_ID: z.string().min(1),
-  ARGO_ENABLED: z.string().optional().default("false"),
-  ARGO_TIERED_CACHE: z.string().optional().default("false"),
+	CLOUDFLARE_API_TOKEN: z.string().min(1),
+	CLOUDFLARE_ZONE_ID: z.string().min(1),
+	CLOUDFLARE_ACCOUNT_ID: z.string().min(1),
+	ARGO_ENABLED: z.string().optional().default("false"),
+	ARGO_TIERED_CACHE: z.string().optional().default("false"),
 })
 
 export const env = envSchema.parse(process.env)
 
 export const argoConfig = {
-  enabled: env.ARGO_ENABLED === "true",
-  tieredCache: env.ARGO_TIERED_CACHE === "true",
+	enabled: env.ARGO_ENABLED === "true",
+	tieredCache: env.ARGO_TIERED_CACHE === "true",
 }
 ```
 
@@ -155,30 +155,30 @@ export const argoConfig = {
 name: Deploy Argo Configuration
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "terraform/argo.tf"
+    push:
+        branches: [main]
+        paths:
+            - "terraform/argo.tf"
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
+    deploy:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v3
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v2
 
-      - name: Terraform Init
-        run: terraform init
-        working-directory: ./terraform
+            - name: Terraform Init
+              run: terraform init
+              working-directory: ./terraform
 
-      - name: Terraform Apply
-        run: terraform apply -auto-approve
-        working-directory: ./terraform
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          TF_VAR_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+            - name: Terraform Apply
+              run: terraform apply -auto-approve
+              working-directory: ./terraform
+              env:
+                  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+                  TF_VAR_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
 ```
 
 ## Enterprise Preview Program

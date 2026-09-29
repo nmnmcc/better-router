@@ -38,7 +38,7 @@ location.reload()
 
 ```javascript
 window.addEventListener("hashchange", () => {
-  zaraz.track("pageview", { page_path: location.pathname + location.hash })
+	zaraz.track("pageview", { page_path: location.pathname + location.hash })
 })
 ```
 
@@ -47,7 +47,7 @@ window.addEventListener("hashchange", () => {
 ```javascript
 const location = useLocation()
 useEffect(() => {
-  zaraz.track("pageview", { page_path: location.pathname })
+	zaraz.track("pageview", { page_path: location.pathname })
 }, [location]) // Include dependency
 ```
 

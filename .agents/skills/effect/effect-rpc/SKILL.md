@@ -23,9 +23,9 @@ import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
 
 const GetUser = Rpc.make("GetUser", {
-  payload: Schema.Struct({ id: Schema.String }),
-  success: Schema.Struct({ id: Schema.String, name: Schema.String }),
-  error: Schema.Struct({ _tag: Schema.Literal("NotFound") }),
+	payload: Schema.Struct({ id: Schema.String }),
+	success: Schema.Struct({ id: Schema.String, name: Schema.String }),
+	error: Schema.Struct({ _tag: Schema.Literal("NotFound") }),
 })
 
 const Users = RpcGroup.make(GetUser)

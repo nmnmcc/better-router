@@ -33,9 +33,9 @@ Must export default object with `fetch` handler:
 
 ```javascript
 export default {
-  async fetch(request, env, ctx) {
-    return new Response("Hello World")
-  },
+	async fetch(request, env, ctx) {
+		return new Response("Hello World")
+	},
 }
 ```
 
@@ -58,11 +58,11 @@ import { Hono } from "https://esm.sh/hono@3"
 // (See patterns.md for multi-module examples)
 
 export default {
-  async fetch(request) {
-    const app = new Hono()
-    app.get("/", (c) => c.text("Hello"))
-    return app.fetch(request)
-  },
+	async fetch(request) {
+		const app = new Hono()
+		app.get("/", (c) => c.text("Hello"))
+		return app.fetch(request)
+	},
 }
 ```
 
@@ -147,9 +147,9 @@ Click **Deploy** button to move code to production:
 1. **Open preview** in browser tab
 2. **Right-click** → Inspect Element
 3. **Console tab** shows Worker logs:
-   - `console.log()` output
-   - Uncaught errors
-   - Network requests (subrequests)
+    - `console.log()` output
+    - Uncaught errors
+    - Network requests (subrequests)
 
 **Note:** DevTools show client-side console, not Worker execution logs. For production logging, use Logpush or Tail Workers.
 

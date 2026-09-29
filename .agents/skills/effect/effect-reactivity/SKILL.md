@@ -25,7 +25,9 @@ const userAtom = Atom.make(Effect.succeed({ id: "u1", name: "Ada" }))
 
 const registry = AtomRegistry.make()
 
-const value = await Effect.runPromise(AtomRegistry.getResult(registry, userAtom)).finally(() => registry.dispose())
+const value = await Effect.runPromise(AtomRegistry.getResult(registry, userAtom)).finally(() =>
+	registry.dispose(),
+)
 ```
 
 The v4 reactivity API is unstable. An Effect-backed atom stores an

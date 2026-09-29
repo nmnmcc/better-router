@@ -4,10 +4,10 @@
 
 ```javascript
 export default {
-  async fetch(request, env, ctx) {
-    // request: Request, env: {} (empty in playground), ctx: ExecutionContext
-    return new Response("Hello")
-  },
+	async fetch(request, env, ctx) {
+		// request: Request, env: {} (empty in playground), ctx: ExecutionContext
+		return new Response("Hello")
+	},
 }
 ```
 
@@ -62,9 +62,9 @@ const data = await response.json()
 
 // With options
 await fetch(url, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ name: "Alice" }),
+	method: "POST",
+	headers: { "Content-Type": "application/json" },
+	body: JSON.stringify({ name: "Alice" }),
 })
 ```
 
@@ -76,8 +76,8 @@ const cache = caches.default
 // Check cache
 let response = await cache.match(request)
 if (!response) {
-  response = await fetch(origin)
-  await cache.put(request, response.clone()) // Clone before put!
+	response = await fetch(origin)
+	await cache.put(request, response.clone()) // Clone before put!
 }
 return response
 ```

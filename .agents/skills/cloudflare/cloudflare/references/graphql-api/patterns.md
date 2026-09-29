@@ -6,27 +6,27 @@ Use time dimension granularity matching your range (see Best Practices below).
 
 ```graphql
 query TrafficTimeSeries($zoneTag: string!, $start: Time!, $end: Time!) {
-  viewer {
-    zones(filter: { zoneTag: $zoneTag }) {
-      httpRequestsAdaptiveGroups(
-        filter: { datetime_gt: $start, datetime_lt: $end }
-        limit: 1000
-        orderBy: [datetimeFiveMinutes_ASC] # or datetimeHour_ASC for longer ranges
-      ) {
-        count
-        dimensions {
-          datetimeFiveMinutes
-        }
-        sum {
-          edgeResponseBytes
-        }
-        ratio {
-          status4xx
-          status5xx
-        }
-      }
-    }
-  }
+	viewer {
+		zones(filter: { zoneTag: $zoneTag }) {
+			httpRequestsAdaptiveGroups(
+				filter: { datetime_gt: $start, datetime_lt: $end }
+				limit: 1000
+				orderBy: [datetimeFiveMinutes_ASC] # or datetimeHour_ASC for longer ranges
+			) {
+				count
+				dimensions {
+					datetimeFiveMinutes
+				}
+				sum {
+					edgeResponseBytes
+				}
+				ratio {
+					status4xx
+					status5xx
+				}
+			}
+		}
+	}
 }
 ```
 
@@ -36,16 +36,20 @@ query TrafficTimeSeries($zoneTag: string!, $start: Time!, $end: Time!) {
 
 ```graphql
 query TopCountries($zoneTag: string!, $start: Time!, $end: Time!) {
-  viewer {
-    zones(filter: { zoneTag: $zoneTag }) {
-      httpRequestsAdaptiveGroups(filter: { datetime_gt: $start, datetime_lt: $end }, limit: 10, orderBy: [count_DESC]) {
-        count
-        dimensions {
-          clientCountryName
-        }
-      }
-    }
-  }
+	viewer {
+		zones(filter: { zoneTag: $zoneTag }) {
+			httpRequestsAdaptiveGroups(
+				filter: { datetime_gt: $start, datetime_lt: $end }
+				limit: 10
+				orderBy: [count_DESC]
+			) {
+				count
+				dimensions {
+					clientCountryName
+				}
+			}
+		}
+	}
 }
 ```
 
@@ -55,27 +59,31 @@ Use `orderBy: [sum_edgeResponseBytes_DESC]` for top paths by bandwidth. Add `edg
 
 ```graphql
 query WorkersOverview($accountTag: string!, $start: Time!, $end: Time!) {
-  viewer {
-    accounts(filter: { accountTag: $accountTag }) {
-      workersInvocationsAdaptive(filter: { datetime_gt: $start, datetime_lt: $end }, limit: 100, orderBy: [sum_requests_DESC]) {
-        sum {
-          requests
-          errors
-          subrequests
-          wallTime
-        }
-        quantiles {
-          cpuTimeP50
-          cpuTimeP99
-          wallTimeP50
-          wallTimeP99
-        }
-        dimensions {
-          scriptName
-        }
-      }
-    }
-  }
+	viewer {
+		accounts(filter: { accountTag: $accountTag }) {
+			workersInvocationsAdaptive(
+				filter: { datetime_gt: $start, datetime_lt: $end }
+				limit: 100
+				orderBy: [sum_requests_DESC]
+			) {
+				sum {
+					requests
+					errors
+					subrequests
+					wallTime
+				}
+				quantiles {
+					cpuTimeP50
+					cpuTimeP99
+					wallTimeP50
+					wallTimeP99
+				}
+				dimensions {
+					scriptName
+				}
+			}
+		}
+	}
 }
 ```
 
@@ -85,21 +93,25 @@ Filter by `scriptName` for a specific Worker. Add `datetimeFiveMinutes` dimensio
 
 ```graphql
 query RecentFirewallEvents($zoneTag: string!, $start: Time!) {
-  viewer {
-    zones(filter: { zoneTag: $zoneTag }) {
-      firewallEventsAdaptive(filter: { datetime_gt: $start }, limit: 50, orderBy: [datetime_DESC]) {
-        action
-        source
-        clientIP
-        clientCountryName
-        userAgent
-        clientRequestHTTPHost
-        clientRequestPath
-        ruleId
-        datetime
-      }
-    }
-  }
+	viewer {
+		zones(filter: { zoneTag: $zoneTag }) {
+			firewallEventsAdaptive(
+				filter: { datetime_gt: $start }
+				limit: 50
+				orderBy: [datetime_DESC]
+			) {
+				action
+				source
+				clientIP
+				clientCountryName
+				userAgent
+				clientRequestHTTPHost
+				clientRequestPath
+				ruleId
+				datetime
+			}
+		}
+	}
 }
 ```
 
@@ -109,16 +121,20 @@ For aggregated firewall stats, use `firewallEventsAdaptiveGroups` with `action: 
 
 ```graphql
 query DNSQueryVolume($zoneTag: string!, $start: Time!, $end: Time!) {
-  viewer {
-    zones(filter: { zoneTag: $zoneTag }) {
-      dnsAnalyticsAdaptiveGroups(filter: { datetime_gt: $start, datetime_lt: $end }, limit: 500, orderBy: [datetimeFiveMinutes_ASC]) {
-        count
-        dimensions {
-          datetimeFiveMinutes
-        }
-      }
-    }
-  }
+	viewer {
+		zones(filter: { zoneTag: $zoneTag }) {
+			dnsAnalyticsAdaptiveGroups(
+				filter: { datetime_gt: $start, datetime_lt: $end }
+				limit: 500
+				orderBy: [datetimeFiveMinutes_ASC]
+			) {
+				count
+				dimensions {
+					datetimeFiveMinutes
+				}
+			}
+		}
+	}
 }
 ```
 
@@ -150,19 +166,23 @@ d1AnalyticsAdaptiveGroups(filter: { date_geq: $start, date_leq: $end }, limit: 1
 
 ```graphql
 query CacheStatusBreakdown($zoneTag: string!, $start: Time!, $end: Time!) {
-  viewer {
-    zones(filter: { zoneTag: $zoneTag }) {
-      httpRequestsAdaptiveGroups(filter: { datetime_gt: $start, datetime_lt: $end }, limit: 20, orderBy: [count_DESC]) {
-        count
-        dimensions {
-          cacheStatus
-        }
-        sum {
-          edgeResponseBytes
-        }
-      }
-    }
-  }
+	viewer {
+		zones(filter: { zoneTag: $zoneTag }) {
+			httpRequestsAdaptiveGroups(
+				filter: { datetime_gt: $start, datetime_lt: $end }
+				limit: 20
+				orderBy: [count_DESC]
+			) {
+				count
+				dimensions {
+					cacheStatus
+				}
+				sum {
+					edgeResponseBytes
+				}
+			}
+		}
+	}
 }
 ```
 
@@ -174,30 +194,40 @@ A single request can query multiple datasets, avoiding extra HTTP round-trips:
 
 ```graphql
 query DashboardOverview($zoneTag: string!, $start: Time!, $end: Time!) {
-  viewer {
-    zones(filter: { zoneTag: $zoneTag }) {
-      httpTraffic: httpRequestsAdaptiveGroups(filter: { datetime_gt: $start, datetime_lt: $end }, limit: 1) {
-        count
-        sum {
-          edgeResponseBytes
-        }
-        ratio {
-          status4xx
-          status5xx
-        }
-      }
-      firewallEvents: firewallEventsAdaptiveGroups(filter: { datetime_gt: $start, datetime_lt: $end }, limit: 5, orderBy: [count_DESC]) {
-        count
-        dimensions {
-          action
-          source
-        }
-      }
-      dnsQueries: dnsAnalyticsAdaptiveGroups(filter: { datetime_gt: $start, datetime_lt: $end }, limit: 1) {
-        count
-      }
-    }
-  }
+	viewer {
+		zones(filter: { zoneTag: $zoneTag }) {
+			httpTraffic: httpRequestsAdaptiveGroups(
+				filter: { datetime_gt: $start, datetime_lt: $end }
+				limit: 1
+			) {
+				count
+				sum {
+					edgeResponseBytes
+				}
+				ratio {
+					status4xx
+					status5xx
+				}
+			}
+			firewallEvents: firewallEventsAdaptiveGroups(
+				filter: { datetime_gt: $start, datetime_lt: $end }
+				limit: 5
+				orderBy: [count_DESC]
+			) {
+				count
+				dimensions {
+					action
+					source
+				}
+			}
+			dnsQueries: dnsAnalyticsAdaptiveGroups(
+				filter: { datetime_gt: $start, datetime_lt: $end }
+				limit: 1
+			) {
+				count
+			}
+		}
+	}
 }
 ```
 

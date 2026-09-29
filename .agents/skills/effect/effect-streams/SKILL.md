@@ -28,16 +28,16 @@ Chunk is the efficient batch representation.
 import { Effect, Stream } from "effect"
 
 const lines = Stream.fromIterable(["1", "2", "bad"]).pipe(
-  Stream.mapEffect((value) =>
-    Effect.gen(function* () {
-      const parsed = Number.parseInt(value, 10)
-      if (Number.isNaN(parsed)) {
-        return yield* Effect.fail({ _tag: "ParseError" as const, value })
-      }
-      return parsed
-    }),
-  ),
-  Stream.filter((value) => value > 0),
+	Stream.mapEffect((value) =>
+		Effect.gen(function* () {
+			const parsed = Number.parseInt(value, 10)
+			if (Number.isNaN(parsed)) {
+				return yield* Effect.fail({ _tag: "ParseError" as const, value })
+			}
+			return parsed
+		}),
+	),
+	Stream.filter((value) => value > 0),
 )
 
 const program = Stream.runCollect(lines)

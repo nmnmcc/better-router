@@ -24,23 +24,24 @@ import { Entity, ShardingConfig } from "effect/unstable/cluster"
 import { Rpc } from "effect/unstable/rpc"
 
 const Account = Entity.make("Account", [
-  Rpc.make("balance", {
-    payload: { accountId: Schema.String },
-    success: Schema.Number,
-    error: Schema.Literal("missing"),
-  }),
+	Rpc.make("balance", {
+		payload: { accountId: Schema.String },
+		success: Schema.Number,
+		error: Schema.Literal("missing"),
+	}),
 ])
 
 const AccountLayer = Account.toLayer({
-  balance: ({ payload }) => (payload.accountId === "closed" ? Effect.fail("missing" as const) : Effect.succeed(100)),
+	balance: ({ payload }) =>
+		payload.accountId === "closed" ? Effect.fail("missing" as const) : Effect.succeed(100),
 })
 
 const testCall = Effect.scoped(
-  Effect.gen(function* () {
-    const makeClient = yield* Entity.makeTestClient(Account, AccountLayer)
-    const client = yield* makeClient("account-42")
-    return yield* client.balance({ accountId: "account-42" })
-  }),
+	Effect.gen(function* () {
+		const makeClient = yield* Entity.makeTestClient(Account, AccountLayer)
+		const client = yield* makeClient("account-42")
+		return yield* client.balance({ accountId: "account-42" })
+	}),
 ).pipe(Effect.provide(ShardingConfig.layerDefaults))
 ```
 

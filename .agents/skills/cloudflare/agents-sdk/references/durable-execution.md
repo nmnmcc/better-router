@@ -8,26 +8,26 @@ Fibers let agent work survive Durable Object eviction. Progress is checkpointed 
 
 ```typescript
 export class MyAgent extends Agent<Env, State> {
-  async onRequest(request: Request) {
-    await this.runFiber("process-data", async (ctx) => {
-      const step1 = await fetchData()
-      ctx.stash({ step: 1, data: step1 })
+	async onRequest(request: Request) {
+		await this.runFiber("process-data", async (ctx) => {
+			const step1 = await fetchData()
+			ctx.stash({ step: 1, data: step1 })
 
-      const step2 = await transform(step1)
-      ctx.stash({ step: 2, result: step2 })
+			const step2 = await transform(step1)
+			ctx.stash({ step: 2, result: step2 })
 
-      this.setState({ result: step2 })
-    })
-    return new Response("Started")
-  }
+			this.setState({ result: step2 })
+		})
+		return new Response("Started")
+	}
 
-  async onFiberRecovered(ctx) {
-    const checkpoint = ctx.stash
-    if (checkpoint.step === 1) {
-      const step2 = await transform(checkpoint.data)
-      this.setState({ result: step2 })
-    }
-  }
+	async onFiberRecovered(ctx) {
+		const checkpoint = ctx.stash
+		if (checkpoint.step === 1) {
+			const step2 = await transform(checkpoint.data)
+			this.setState({ result: step2 })
+		}
+	}
 }
 ```
 

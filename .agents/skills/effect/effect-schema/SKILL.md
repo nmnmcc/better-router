@@ -22,9 +22,9 @@ written TypeScript interface and a second validator.
 import { Effect, Schema } from "effect"
 
 const User = Schema.Struct({
-  id: Schema.String,
-  name: Schema.String,
-  role: Schema.Literals(["admin", "member"]),
+	id: Schema.String,
+	name: Schema.String,
+	role: Schema.Literals(["admin", "member"]),
 })
 
 const decodeUser = Schema.decodeUnknownEffect(User)

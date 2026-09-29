@@ -18,7 +18,9 @@ import { Effect } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 
 const port = Flag.Int("port").pipe(Flag.withDefault(8080))
-const serve = Command.make("serve", { port }).pipe(Command.withHandler(({ port }) => Effect.logInfo(`listening on ${port}`)))
+const serve = Command.make("serve", { port }).pipe(
+	Command.withHandler(({ port }) => Effect.logInfo(`listening on ${port}`)),
+)
 
 const cli = Command.run(serve, { version: "1.0.0" })
 ```

@@ -5,7 +5,11 @@
 ## Basic HTML
 
 ```html
-<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "YOUR_TOKEN", "spa": true}'></script>
+<script
+	defer
+	src="https://static.cloudflareinsights.com/beacon.min.js"
+	data-cf-beacon='{"token": "YOUR_TOKEN", "spa": true}'
+></script>
 ```
 
 Place before closing `</body>` tag.
@@ -29,8 +33,8 @@ Place before closing `</body>` tag.
 
 ```json
 {
-  "token": "YOUR_TOKEN",
-  "spa": true
+	"token": "YOUR_TOKEN",
+	"spa": true
 }
 ```
 
@@ -50,10 +54,10 @@ connect-src 'self' https://cloudflareinsights.com;
 ```typescript
 // Load conditionally based on consent
 if (localStorage.getItem("analytics-consent") === "true") {
-  const script = document.createElement("script")
-  script.src = "https://static.cloudflareinsights.com/beacon.min.js"
-  script.defer = true
-  script.setAttribute("data-cf-beacon", '{"token": "YOUR_TOKEN", "spa": true}')
-  document.body.appendChild(script)
+	const script = document.createElement("script")
+	script.src = "https://static.cloudflareinsights.com/beacon.min.js"
+	script.defer = true
+	script.setAttribute("data-cf-beacon", '{"token": "YOUR_TOKEN", "spa": true}')
+	document.body.appendChild(script)
 }
 ```

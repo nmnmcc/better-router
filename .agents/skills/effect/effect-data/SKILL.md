@@ -34,8 +34,8 @@ declare const maybeUser: { readonly name: string } | null | undefined
 declare const text: string
 
 const label = Option.fromNullishOr(maybeUser).pipe(
-  Option.map((user) => user.name),
-  Option.getOrElse(() => "anonymous"),
+	Option.map((user) => user.name),
+	Option.getOrElse(() => "anonymous"),
 )
 
 const parsed = Result.fromOption(EffectNumber.parse(text), () => "invalid-number" as const)

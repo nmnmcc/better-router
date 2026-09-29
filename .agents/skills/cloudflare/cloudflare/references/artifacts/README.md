@@ -42,7 +42,7 @@ Artifacts is especially useful for agent and automation workflows where each uni
 
 ```typescript
 interface Env {
-  ARTIFACTS: Artifacts
+	ARTIFACTS: Artifacts
 }
 
 const created = await env.ARTIFACTS.create("starter-repo")

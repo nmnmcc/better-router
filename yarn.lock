@@ -57,94 +57,40 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@better-router/example-matrix-anthropic-to-anthropic@workspace:examples/matrix/anthropic-to-anthropic":
+"@better-router/example-failover@workspace:examples/failover":
   version: 0.0.0-use.local
-  resolution: "@better-router/example-matrix-anthropic-to-anthropic@workspace:examples/matrix/anthropic-to-anthropic"
-  dependencies:
-    "@better-router/example-matrix-shared": "workspace:*"
-    tsx: "npm:^4.23.15"
-  languageName: unknown
-  linkType: soft
-
-"@better-router/example-matrix-anthropic-to-chat@workspace:examples/matrix/anthropic-to-chat":
-  version: 0.0.0-use.local
-  resolution: "@better-router/example-matrix-anthropic-to-chat@workspace:examples/matrix/anthropic-to-chat"
-  dependencies:
-    "@better-router/example-matrix-shared": "workspace:*"
-    tsx: "npm:^4.23.15"
-  languageName: unknown
-  linkType: soft
-
-"@better-router/example-matrix-anthropic-to-responses@workspace:examples/matrix/anthropic-to-responses":
-  version: 0.0.0-use.local
-  resolution: "@better-router/example-matrix-anthropic-to-responses@workspace:examples/matrix/anthropic-to-responses"
-  dependencies:
-    "@better-router/example-matrix-shared": "workspace:*"
-    tsx: "npm:^4.23.15"
-  languageName: unknown
-  linkType: soft
-
-"@better-router/example-matrix-chat-to-anthropic@workspace:examples/matrix/chat-to-anthropic":
-  version: 0.0.0-use.local
-  resolution: "@better-router/example-matrix-chat-to-anthropic@workspace:examples/matrix/chat-to-anthropic"
-  dependencies:
-    "@better-router/example-matrix-shared": "workspace:*"
-    tsx: "npm:^4.23.15"
-  languageName: unknown
-  linkType: soft
-
-"@better-router/example-matrix-chat-to-chat@workspace:examples/matrix/chat-to-chat":
-  version: 0.0.0-use.local
-  resolution: "@better-router/example-matrix-chat-to-chat@workspace:examples/matrix/chat-to-chat"
-  dependencies:
-    "@better-router/example-matrix-shared": "workspace:*"
-    tsx: "npm:^4.23.15"
-  languageName: unknown
-  linkType: soft
-
-"@better-router/example-matrix-chat-to-responses@workspace:examples/matrix/chat-to-responses":
-  version: 0.0.0-use.local
-  resolution: "@better-router/example-matrix-chat-to-responses@workspace:examples/matrix/chat-to-responses"
-  dependencies:
-    "@better-router/example-matrix-shared": "workspace:*"
-    tsx: "npm:^4.23.15"
-  languageName: unknown
-  linkType: soft
-
-"@better-router/example-matrix-responses-to-anthropic@workspace:examples/matrix/responses-to-anthropic":
-  version: 0.0.0-use.local
-  resolution: "@better-router/example-matrix-responses-to-anthropic@workspace:examples/matrix/responses-to-anthropic"
-  dependencies:
-    "@better-router/example-matrix-shared": "workspace:*"
-    tsx: "npm:^4.23.15"
-  languageName: unknown
-  linkType: soft
-
-"@better-router/example-matrix-responses-to-chat@workspace:examples/matrix/responses-to-chat":
-  version: 0.0.0-use.local
-  resolution: "@better-router/example-matrix-responses-to-chat@workspace:examples/matrix/responses-to-chat"
-  dependencies:
-    "@better-router/example-matrix-shared": "workspace:*"
-    tsx: "npm:^4.23.15"
-  languageName: unknown
-  linkType: soft
-
-"@better-router/example-matrix-responses-to-responses@workspace:examples/matrix/responses-to-responses":
-  version: 0.0.0-use.local
-  resolution: "@better-router/example-matrix-responses-to-responses@workspace:examples/matrix/responses-to-responses"
-  dependencies:
-    "@better-router/example-matrix-shared": "workspace:*"
-    tsx: "npm:^4.23.15"
-  languageName: unknown
-  linkType: soft
-
-"@better-router/example-matrix-shared@workspace:*, @better-router/example-matrix-shared@workspace:examples/matrix/shared":
-  version: 0.0.0-use.local
-  resolution: "@better-router/example-matrix-shared@workspace:examples/matrix/shared"
+  resolution: "@better-router/example-failover@workspace:examples/failover"
   dependencies:
     "@better-router/core": "workspace:*"
     "@better-router/plugin-anthropic-messages": "workspace:*"
     "@better-router/plugin-openai-chat-completions": "workspace:*"
+    "@better-router/plugin-openai-responses": "workspace:*"
+    "@effect/platform-node": "npm:4.0.0-rc.117"
+    "@types/node": "npm:^24.0.0"
+    effect: "npm:4.0.0-rc.117"
+    tsx: "npm:^4.23.15"
+  languageName: unknown
+  linkType: soft
+
+"@better-router/example-quickstart@workspace:examples/quickstart":
+  version: 0.0.0-use.local
+  resolution: "@better-router/example-quickstart@workspace:examples/quickstart"
+  dependencies:
+    "@better-router/core": "workspace:*"
+    "@better-router/plugin-openai-chat-completions": "workspace:*"
+    "@better-router/plugin-openai-responses": "workspace:*"
+    "@effect/platform-node": "npm:4.0.0-rc.117"
+    "@types/node": "npm:^24.0.0"
+    effect: "npm:4.0.0-rc.117"
+    tsx: "npm:^4.23.15"
+  languageName: unknown
+  linkType: soft
+
+"@better-router/example-sdk-call@workspace:examples/sdk-call":
+  version: 0.0.0-use.local
+  resolution: "@better-router/example-sdk-call@workspace:examples/sdk-call"
+  dependencies:
+    "@better-router/core": "workspace:*"
     "@better-router/plugin-openai-responses": "workspace:*"
     "@effect/platform-node": "npm:4.0.0-rc.117"
     "@types/node": "npm:^24.0.0"

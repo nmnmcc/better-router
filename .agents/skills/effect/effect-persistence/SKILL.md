@@ -19,9 +19,9 @@ import { Effect } from "effect"
 import { KeyValueStore } from "effect/unstable/persistence"
 
 const program = Effect.gen(function* () {
-  const store = yield* KeyValueStore.KeyValueStore
-  yield* store.set("users/u1", "Ada")
-  return yield* store.get("users/u1")
+	const store = yield* KeyValueStore.KeyValueStore
+	yield* store.set("users/u1", "Ada")
+	return yield* store.get("users/u1")
 }).pipe(Effect.provide(KeyValueStore.layerMemory))
 ```
 

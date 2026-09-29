@@ -29,18 +29,18 @@ import { Context, Effect } from "effect"
 type User = { readonly id: string; readonly name: string }
 
 class UserRepo extends Context.Service<
-  UserRepo,
-  {
-    readonly find: (id: string) => Effect.Effect<User, "NotFound">
-  }
+	UserRepo,
+	{
+		readonly find: (id: string) => Effect.Effect<User, "NotFound">
+	}
 >()("UserRepo") {}
 
 const loadName = (id: string) =>
-  Effect.gen(function* () {
-    const repo = yield* UserRepo
-    const user = yield* repo.find(id)
-    return user.name
-  })
+	Effect.gen(function* () {
+		const repo = yield* UserRepo
+		const user = yield* repo.find(id)
+		return user.name
+	})
 ```
 
 Keep the repository error type visible. Do not hide a missing service with a
@@ -60,17 +60,17 @@ cast: the R parameter should tell the caller which Layer is still required.
 import { Context, Effect, Layer } from "effect"
 
 class Config extends Context.Service<
-  Config,
-  {
-    readonly apiUrl: string
-  }
+	Config,
+	{
+		readonly apiUrl: string
+	}
 >()("Config") {}
 
 const configLayer = Layer.succeed(Config, { apiUrl: "https://api.example" })
 
 const program = Effect.gen(function* () {
-  const config = yield* Config
-  return config.apiUrl
+	const config = yield* Config
+	return config.apiUrl
 }).pipe(Effect.provide(configLayer))
 ```
 

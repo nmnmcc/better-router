@@ -1,4 +1,4 @@
 {
-  "nix.enableLanguageServer": true,
-  "nix.serverPath": ["devenv", "lsp"]
+	"nix.enableLanguageServer": true,
+	"nix.serverPath": ["devenv", "lsp"]
 }

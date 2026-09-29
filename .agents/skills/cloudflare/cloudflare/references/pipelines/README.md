@@ -47,14 +47,14 @@ Minimal Worker producer:
 
 ```typescript
 interface Env {
-  MY_STREAM: Pipeline
+	MY_STREAM: Pipeline
 }
 
 export default {
-  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    ctx.waitUntil(env.MY_STREAM.send([{ event_id: crypto.randomUUID(), amount: 29.99 }]))
-    return new Response("OK")
-  },
+	async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+		ctx.waitUntil(env.MY_STREAM.send([{ event_id: crypto.randomUUID(), amount: 29.99 }]))
+		return new Response("OK")
+	},
 } satisfies ExportedHandler<Env>
 ```
 

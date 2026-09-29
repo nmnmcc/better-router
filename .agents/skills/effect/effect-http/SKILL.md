@@ -24,12 +24,12 @@ import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 const ResponseBody = Schema.Struct({ id: Schema.String })
 
 const getUser = (id: string) =>
-  Effect.gen(function* () {
-    const client = yield* HttpClient.HttpClient
-    const request = HttpClientRequest.get("/users/" + id)
-    const response = yield* client.execute(request)
-    return yield* response.json.pipe(Effect.flatMap(Schema.decodeUnknownEffect(ResponseBody)))
-  })
+	Effect.gen(function* () {
+		const client = yield* HttpClient.HttpClient
+		const request = HttpClientRequest.get("/users/" + id)
+		const response = yield* client.execute(request)
+		return yield* response.json.pipe(Effect.flatMap(Schema.decodeUnknownEffect(ResponseBody)))
+	})
 ```
 
 Check the installed v4 declarations for the exact client service and body

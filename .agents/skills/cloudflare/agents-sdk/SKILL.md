@@ -92,11 +92,11 @@ npm install agents @cloudflare/ai-chat ai @ai-sdk/react
 
 ```jsonc
 {
-  "compatibility_flags": ["nodejs_compat"],
-  "durable_objects": {
-    "bindings": [{ "name": "MyAgent", "class_name": "MyAgent" }],
-  },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MyAgent"] }],
+	"compatibility_flags": ["nodejs_compat"],
+	"durable_objects": {
+		"bindings": [{ "name": "MyAgent", "class_name": "MyAgent" }],
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["MyAgent"] }],
 }
 ```
 
@@ -115,25 +115,25 @@ import { Agent, routeAgentRequest, callable } from "agents"
 type State = { count: number }
 
 export class Counter extends Agent<Env, State> {
-  initialState = { count: 0 }
+	initialState = { count: 0 }
 
-  validateStateChange(nextState: State, source: Connection | "server") {
-    if (nextState.count < 0) throw new Error("Count cannot be negative")
-  }
+	validateStateChange(nextState: State, source: Connection | "server") {
+		if (nextState.count < 0) throw new Error("Count cannot be negative")
+	}
 
-  onStateUpdate(state: State, source: Connection | "server") {
-    console.log("State updated:", state)
-  }
+	onStateUpdate(state: State, source: Connection | "server") {
+		console.log("State updated:", state)
+	}
 
-  @callable()
-  increment() {
-    this.setState({ count: this.state.count + 1 })
-    return this.state.count
-  }
+	@callable()
+	increment() {
+		this.setState({ count: this.state.count + 1 })
+		return this.state.count
+	}
 }
 
 export default {
-  fetch: (req, env) => routeAgentRequest(req, env) ?? new Response("Not found", { status: 404 }),
+	fetch: (req, env) => routeAgentRequest(req, env) ?? new Response("Not found", { status: 404 }),
 }
 ```
 

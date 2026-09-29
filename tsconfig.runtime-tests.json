@@ -1,12 +1,20 @@
 {
-  "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "composite": false,
-    "noEmit": true,
-    "rootDir": ".",
-    "lib": ["ESNext", "DOM"],
-    "types": ["node"]
-  },
-  "include": ["vitest.config.ts", "packages/*/test/**/*.ts", "examples/*/test/**/*.ts", "examples/matrix/*/test/**/*.ts"],
-  "references": [{ "path": "packages/core" }, { "path": "packages/plugin-openai-chat-completions" }, { "path": "packages/plugin-openai-responses" }, { "path": "packages/plugin-anthropic-messages" }, { "path": "examples/matrix/shared" }, { "path": "examples/matrix/chat-to-chat" }, { "path": "examples/matrix/chat-to-responses" }, { "path": "examples/matrix/chat-to-anthropic" }, { "path": "examples/matrix/responses-to-chat" }, { "path": "examples/matrix/responses-to-responses" }, { "path": "examples/matrix/responses-to-anthropic" }, { "path": "examples/matrix/anthropic-to-chat" }, { "path": "examples/matrix/anthropic-to-responses" }, { "path": "examples/matrix/anthropic-to-anthropic" }]
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"composite": false,
+		"noEmit": true,
+		"rootDir": ".",
+		"lib": ["ESNext", "DOM"],
+		"types": ["node"]
+	},
+	"include": ["vitest.config.ts", "packages/*/test/**/*.ts", "examples/*/test/**/*.ts"],
+	"references": [
+		{ "path": "packages/core" },
+		{ "path": "packages/plugin-openai-chat-completions" },
+		{ "path": "packages/plugin-openai-responses" },
+		{ "path": "packages/plugin-anthropic-messages" },
+		{ "path": "examples/quickstart" },
+		{ "path": "examples/failover" },
+		{ "path": "examples/sdk-call" }
+	]
 }

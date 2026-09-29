@@ -25,8 +25,8 @@ import Cloudflare from "cloudflare"
 const client = new Cloudflare({ apiToken: process.env.CLOUDFLARE_API_TOKEN })
 
 const result = await client.argo.smartRouting.edit({
-  zone_id: "your-zone-id",
-  value: "on",
+	zone_id: "your-zone-id",
+	value: "on",
 })
 
 console.log(`Argo enabled: ${result.value}`)

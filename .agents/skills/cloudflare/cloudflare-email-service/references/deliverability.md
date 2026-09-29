@@ -64,11 +64,11 @@ Every send (REST API or Workers binding) returns immediate delivery feedback. Ch
 
 ```json
 {
-  "result": {
-    "delivered": ["user@example.com"],
-    "permanent_bounces": ["bad@nonexistent.com"],
-    "queued": ["slow@recipient.com"]
-  }
+	"result": {
+		"delivered": ["user@example.com"],
+		"permanent_bounces": ["bad@nonexistent.com"],
+		"queued": ["slow@recipient.com"]
+	}
 }
 ```
 
@@ -87,9 +87,9 @@ Returns:
 
 ```json
 {
-  "result": {
-    "quota": { "value": 5000, "unit": "day" }
-  }
+	"result": {
+		"quota": { "value": 5000, "unit": "day" }
+	}
 }
 ```
 
@@ -108,18 +108,18 @@ Returns:
 
 ```json
 {
-  "page": 1,
-  "per_page": 100,
-  "total": 2,
-  "result": [
-    {
-      "id": "396a5436-d4b0-42a6-b3fc-48e8fa522321",
-      "email": "bounced@example.com",
-      "reason": "hard_bounce",
-      "created_at": "2026-03-15T10:00:00Z",
-      "expires_at": null
-    }
-  ]
+	"page": 1,
+	"per_page": 100,
+	"total": 2,
+	"result": [
+		{
+			"id": "396a5436-d4b0-42a6-b3fc-48e8fa522321",
+			"email": "bounced@example.com",
+			"reason": "hard_bounce",
+			"created_at": "2026-03-15T10:00:00Z",
+			"expires_at": null
+		}
+	]
 }
 ```
 
@@ -177,17 +177,21 @@ These are **zone-level** datasets — query under `viewer > zones`, not `account
 
 ```graphql
 query EmailSendingByStatus($zoneTag: string!, $start: Date!, $end: Date!) {
-  viewer {
-    zones(filter: { zoneTag: $zoneTag }) {
-      emailSendingAdaptiveGroups(filter: { date_geq: $start, date_leq: $end }, limit: 10000, orderBy: [date_DESC]) {
-        count
-        dimensions {
-          date
-          status
-        }
-      }
-    }
-  }
+	viewer {
+		zones(filter: { zoneTag: $zoneTag }) {
+			emailSendingAdaptiveGroups(
+				filter: { date_geq: $start, date_leq: $end }
+				limit: 10000
+				orderBy: [date_DESC]
+			) {
+				count
+				dimensions {
+					date
+					status
+				}
+			}
+		}
+	}
 }
 ```
 
@@ -195,18 +199,22 @@ query EmailSendingByStatus($zoneTag: string!, $start: Date!, $end: Date!) {
 
 ```graphql
 query EmailFailures($zoneTag: string!, $start: Date!, $end: Date!) {
-  viewer {
-    zones(filter: { zoneTag: $zoneTag }) {
-      emailSendingAdaptiveGroups(filter: { date_geq: $start, date_leq: $end, status: "deliveryFailed" }, limit: 10000, orderBy: [date_DESC]) {
-        count
-        dimensions {
-          date
-          errorCause
-          sendingDomain
-        }
-      }
-    }
-  }
+	viewer {
+		zones(filter: { zoneTag: $zoneTag }) {
+			emailSendingAdaptiveGroups(
+				filter: { date_geq: $start, date_leq: $end, status: "deliveryFailed" }
+				limit: 10000
+				orderBy: [date_DESC]
+			) {
+				count
+				dimensions {
+					date
+					errorCause
+					sendingDomain
+				}
+			}
+		}
+	}
 }
 ```
 
@@ -214,26 +222,30 @@ query EmailFailures($zoneTag: string!, $start: Date!, $end: Date!) {
 
 ```graphql
 query RecentEmailEvents($zoneTag: string!, $start: Time!, $end: Time!) {
-  viewer {
-    zones(filter: { zoneTag: $zoneTag }) {
-      emailSendingAdaptive(filter: { datetime_geq: $start, datetime_leq: $end }, limit: 50, orderBy: [datetime_DESC]) {
-        datetime
-        from
-        to
-        subject
-        status
-        eventType
-        sendingDomain
-        messageId
-        errorCause
-        errorDetail
-        dkim
-        dmarc
-        spf
-        isSpam
-      }
-    }
-  }
+	viewer {
+		zones(filter: { zoneTag: $zoneTag }) {
+			emailSendingAdaptive(
+				filter: { datetime_geq: $start, datetime_leq: $end }
+				limit: 50
+				orderBy: [datetime_DESC]
+			) {
+				datetime
+				from
+				to
+				subject
+				status
+				eventType
+				sendingDomain
+				messageId
+				errorCause
+				errorDetail
+				dkim
+				dmarc
+				spf
+				isSpam
+			}
+		}
+	}
 }
 ```
 

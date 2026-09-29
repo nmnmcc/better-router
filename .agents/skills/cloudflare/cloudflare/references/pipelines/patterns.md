@@ -6,11 +6,15 @@ Code-first patterns. For observability dataset/field schemas and Logpush dataset
 
 ```typescript
 export default {
-  async fetch(req, env, ctx) {
-    const event = { event_id: crypto.randomUUID(), event_type: "page_view", timestamp: new Date().toISOString() }
-    ctx.waitUntil(env.MY_STREAM.send([event])) // don't block the response
-    return new Response("OK")
-  },
+	async fetch(req, env, ctx) {
+		const event = {
+			event_id: crypto.randomUUID(),
+			event_type: "page_view",
+			timestamp: new Date().toISOString(),
+		}
+		ctx.waitUntil(env.MY_STREAM.send([event])) // don't block the response
+		return new Response("OK")
+	},
 }
 ```
 
@@ -22,9 +26,9 @@ Structured streams drop invalid events silently during processing. Validate befo
 import { z } from "zod"
 
 const EventSchema = z.object({
-  event_id: z.string(),
-  category: z.enum(["purchase", "view"]),
-  amount: z.number().positive().optional(),
+	event_id: z.string(),
+	category: z.enum(["purchase", "view"]),
+	amount: z.number().positive().optional(),
 })
 
 const validated = EventSchema.parse(rawEvent) // throws synchronously
@@ -36,24 +40,24 @@ await env.MY_STREAM.send([validated])
 ```jsonc
 // wrangler.jsonc
 {
-  "name": "collector",
-  "pipelines": [{ "stream": "<STREAM_ID>", "binding": "EVENT_STREAM" }],
-  "triggers": { "crons": ["*/5 * * * *"] },
+	"name": "collector",
+	"pipelines": [{ "stream": "<STREAM_ID>", "binding": "EVENT_STREAM" }],
+	"triggers": { "crons": ["*/5 * * * *"] },
 }
 ```
 
 ```typescript
 export default {
-  async scheduled(event, env, ctx) {
-    const items = await (await fetch("https://api.example.com/data")).json()
-    const events = items.map((i) => ({
-      event_id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      category: i.type,
-      amount: i.value,
-    }))
-    await env.EVENT_STREAM.send(events)
-  },
+	async scheduled(event, env, ctx) {
+		const items = await (await fetch("https://api.example.com/data")).json()
+		const events = items.map((i) => ({
+			event_id: crypto.randomUUID(),
+			timestamp: new Date().toISOString(),
+			category: i.type,
+			amount: i.value,
+		}))
+		await env.EVENT_STREAM.send(events)
+	},
 }
 ```
 
@@ -79,8 +83,8 @@ Configure via Dashboard (**Logpush → Create a job → Pipelines** destination)
 
 ```typescript
 await Promise.all([
-  env.ANALYTICS_STREAM.send([event]), // long-term storage + SQL
-  env.PROCESS_QUEUE.send(event), // immediate processing + retries
+	env.ANALYTICS_STREAM.send([event]), // long-term storage + SQL
+	env.PROCESS_QUEUE.send(event), // immediate processing + retries
 ])
 ```
 

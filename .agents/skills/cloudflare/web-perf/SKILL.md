@@ -65,15 +65,15 @@ Audit Progress:
 
 1. Navigate to the target URL:
 
-   ```
-   navigate_page(url: "<target-url>")
-   ```
+    ```
+    navigate_page(url: "<target-url>")
+    ```
 
 2. Start a performance trace with reload to capture cold-load metrics:
 
-   ```
-   performance_start_trace(autoStop: true, reload: true)
-   ```
+    ```
+    performance_start_trace(autoStop: true, reload: true)
+    ```
 
 3. Wait for trace completion, then retrieve results.
 

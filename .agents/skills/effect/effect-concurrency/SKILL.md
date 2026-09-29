@@ -31,21 +31,21 @@ Before selecting a primitive, answer:
 import { Effect, Queue } from "effect"
 
 const worker = (queue: Queue.Queue<string>) =>
-  Effect.forever(
-    Effect.gen(function* () {
-      const job = yield* Queue.take(queue)
-      yield* Effect.logInfo("processing " + job)
-    }),
-  )
+	Effect.forever(
+		Effect.gen(function* () {
+			const job = yield* Queue.take(queue)
+			yield* Effect.logInfo("processing " + job)
+		}),
+	)
 
 const program = Effect.scoped(
-  Effect.gen(function* () {
-    const queue = yield* Queue.bounded<string>(100)
-    yield* Effect.forkScoped(worker(queue))
-    yield* Queue.offer(queue, "job-1")
-    yield* Effect.sleep("10 millis")
-    yield* Queue.shutdown(queue)
-  }),
+	Effect.gen(function* () {
+		const queue = yield* Queue.bounded<string>(100)
+		yield* Effect.forkScoped(worker(queue))
+		yield* Queue.offer(queue, "job-1")
+		yield* Effect.sleep("10 millis")
+		yield* Queue.shutdown(queue)
+	}),
 )
 ```
 

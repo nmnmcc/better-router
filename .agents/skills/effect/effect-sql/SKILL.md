@@ -29,15 +29,15 @@ const UserId = Schema.Struct({ id: Schema.String })
 const User = Schema.Struct({ id: Schema.String, name: Schema.String })
 
 const findUser = (id: string) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient
-    const query = SqlSchema.findOne({
-      Request: UserId,
-      Result: User,
-      execute: (request) => sql`SELECT id, name FROM users WHERE id = ${request.id}`,
-    })
-    return yield* query({ id })
-  })
+	Effect.gen(function* () {
+		const sql = yield* SqlClient.SqlClient
+		const query = SqlSchema.findOne({
+			Request: UserId,
+			Result: User,
+			execute: (request) => sql`SELECT id, name FROM users WHERE id = ${request.id}`,
+		})
+		return yield* query({ id })
+	})
 ```
 
 Verify the current SqlSchema signature and SQL tag behavior in the installed

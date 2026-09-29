@@ -30,14 +30,14 @@ import { Effect, Fiber } from "effect"
 import { TestClock } from "effect/testing"
 
 const program = Effect.gen(function* () {
-  yield* Effect.sleep("5 seconds")
-  return "done"
+	yield* Effect.sleep("5 seconds")
+	return "done"
 })
 
 const test = Effect.gen(function* () {
-  const fiber = yield* Effect.forkChild(program)
-  yield* TestClock.adjust("5 seconds")
-  return yield* Fiber.join(fiber)
+	const fiber = yield* Effect.forkChild(program)
+	yield* TestClock.adjust("5 seconds")
+	return yield* Fiber.join(fiber)
 })
 
 const result = test.pipe(Effect.provide(TestClock.layer()))

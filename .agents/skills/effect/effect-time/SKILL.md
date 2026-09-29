@@ -25,11 +25,14 @@ behavior or deterministic randomness is part of the design.
 ```ts
 import { Duration, Effect, Schedule } from "effect"
 
-const retryPolicy = Schedule.exponential(Duration.millis(100)).pipe(Schedule.jittered, Schedule.upTo({ times: 4 }))
+const retryPolicy = Schedule.exponential(Duration.millis(100)).pipe(
+	Schedule.jittered,
+	Schedule.upTo({ times: 4 }),
+)
 
 const program = Effect.retry(
-  Effect.tryPromise(() => fetch("https://example.test")),
-  retryPolicy,
+	Effect.tryPromise(() => fetch("https://example.test")),
+	retryPolicy,
 )
 ```
 

@@ -27,9 +27,9 @@ const User = Schema.Struct({ id: Schema.String, name: Schema.String })
 const NotFound = Schema.Struct({ _tag: Schema.Literal("NotFound") }).pipe(HttpApiSchema.status(404))
 
 const getUser = HttpApiEndpoint.get("getUser", "/users/:id", {
-  params: Schema.Struct({ id: Schema.String }),
-  success: User,
-  error: NotFound,
+	params: Schema.Struct({ id: Schema.String }),
+	success: User,
+	error: NotFound,
 })
 
 const Users = HttpApiGroup.make("users").add(getUser)

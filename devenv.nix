@@ -1,19 +1,39 @@
 { pkgs, ... }:
 
 {
-  git-hooks.hooks.treefmt = {
+  treefmt = {
     enable = true;
-    settings.formatters = [
-      pkgs.prettier
-      pkgs.nixfmt
+
+    config.programs = {
+      nixfmt.enable = true;
+      prettier = {
+        enable = true;
+        includes = [
+          "*.ts"
+          "*.mts"
+          "*.js"
+          "*.mjs"
+          "*.json"
+          "*.md"
+          "*.yml"
+          "*.yaml"
+        ];
+        excludes = [
+          "references/**"
+          "yarn.lock"
+          "devenv.lock"
+          "packages/plugin-openai-responses/src/generated/OpenResponses.ts"
+          "packages/plugin-openai-responses/src/generated/OpenResponsesSchema.json"
+        ];
+      };
+    };
+
+    config.settings.excludes = [
+      "references/**"
     ];
   };
 
-  packages = [
-    pkgs.treefmt
-    pkgs.prettier
-    pkgs.nixfmt
-  ];
+  git-hooks.hooks.treefmt.enable = true;
 
   languages.javascript = {
     enable = true;

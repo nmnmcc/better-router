@@ -57,13 +57,13 @@ Snippets execute synchronously in the request path - performance is critical.
 ```javascript
 // Snippet: Add security headers
 export default {
-  async fetch(request) {
-    const response = await fetch(request)
-    const newResponse = new Response(response.body, response)
-    newResponse.headers.set("X-Frame-Options", "DENY")
-    newResponse.headers.set("X-Content-Type-Options", "nosniff")
-    return newResponse
-  },
+	async fetch(request) {
+		const response = await fetch(request)
+		const newResponse = new Response(response.body, response)
+		newResponse.headers.set("X-Frame-Options", "DENY")
+		newResponse.headers.set("X-Content-Type-Options", "nosniff")
+		return newResponse
+	},
 }
 ```
 
