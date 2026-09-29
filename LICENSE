@@ -1,21 +1,3 @@
-• Running devenv:files:cleanup
-✓ Running devenv:files:cleanup in 17.7ms
-• Running devenv:files
-✓ Running devenv:files in 19.7ms
-• Running devenv:git-hooks:install
-• Running devenv:treefmt:run
-✓ Running devenv:git-hooks:install in 16.7ms
-• Running devenv:git-hooks:run
-  traversed 490 files
-  emitted 476 files for processing
-  formatted 0 files (0 changed) in 15ms
-✓ Running devenv:treefmt:run in 33.6ms
-• Running devenv:enterShell
-✓ Running devenv:enterShell in 22.2ms
-✓ Running devenv:git-hooks:run in 2.13s
-• Running devenv:enterTest
-✓ Running devenv:enterTest in 24.6µs (no command)
-✨ devenv 2.3.1 is out of date. Please update to 2.4.0: https://devenv.sh/getting-started/#installation
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
 
