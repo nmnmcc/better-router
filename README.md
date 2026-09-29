@@ -29,6 +29,10 @@ GATEWAY_API_KEY=client OPENAI_API_KEY=provider OPENAI_MODEL=gpt-model \
 
 Library packages build with tsdown to ESM-only `.mjs` entries, `.d.mts` declarations, and source maps. Root and PascalCase subpath exports resolve to `dist/`. TypeScript project references write intermediate declarations to ignored `.types/` directories. Yarn 4 manages the workspace.
 
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0 only. See [LICENSE](LICENSE) for the full text.
+
 ```sh
 devenv shell -- yarn install --immutable
 devenv shell -- yarn check
