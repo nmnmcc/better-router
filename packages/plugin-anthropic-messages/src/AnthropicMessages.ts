@@ -1,11 +1,13 @@
 import { Clock, Effect, HashMap, Option, Redacted, Result, Schema, Stream } from "effect"
 import { Sse } from "effect/unstable/encoding"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import type { ModelDeployment, ModelExecutor, ProviderError } from "@better-router/core/Deployment"
-import type { InputItem, ModelRequest } from "@better-router/core/Model"
-import { fromNative } from "@better-router/core/ModelEvents"
-import type { NativeChunk } from "@better-router/core/ModelEvents"
-import { Request } from "@better-router/core/ModelSchema"
+import { ProviderError } from "@better-router/core/Deployment"
+import type { Deployment, GenerationExecutor } from "@better-router/core/Deployment"
+import type { ProtocolResponse, SelectedRequest } from "@better-router/core/Pipeline"
+import type { GenerationInputItem, GenerationRequest } from "@better-router/core/Generation"
+import { fromNative } from "@better-router/core/GenerationEvents"
+import type { NativeChunk } from "@better-router/core/GenerationEvents"
+import { Request } from "@better-router/core/GenerationSchema"
 import { fromSchema } from "@better-router/core/Conversion"
 
 export interface AnthropicMessagesDeploymentConfig {
@@ -25,20 +27,22 @@ export const DeploymentConfig = Schema.Struct({
   defaultMaxTokens: Schema.Int.check(Schema.isGreaterThanOrEqualTo(16)),
   version: Schema.optional(Schema.String),
 })
-export const DeploymentError = Schema.Struct({ message: Schema.String })
-export type DeploymentError = typeof DeploymentError.Type
+export class DeploymentError extends Schema.TaggedError<DeploymentError>()("DeploymentError", {
+  message: Schema.String,
+}) {}
 
-export interface AnthropicMessagesDeployment<Requirements = never> extends ModelDeployment<Requirements> {
+export interface AnthropicMessagesDeployment<Requirements = never> extends Deployment<Requirements> {
   readonly provider: "anthropic"
   readonly protocol: "anthropic.messages"
   readonly execute: {
-    readonly http: ModelExecutor<Requirements>
+    readonly http: GenerationExecutor<Requirements>
     readonly websocket?: never
+    readonly direct?: (request: SelectedRequest) => Effect.Effect<ProtocolResponse, ProviderError, Requirements>
   }
 }
 
-const fail = (kind: ProviderError["kind"], message: string, retryable = false, cause?: unknown): ProviderError => ({ kind, message, retryable, ...(cause === undefined ? {} : { cause }) })
-const isError = Schema.is(Schema.Struct({ kind: Schema.String, message: Schema.String, retryable: Schema.Boolean }))
+const fail = (kind: ProviderError["kind"], message: string, retryable = false, cause?: unknown): ProviderError => ProviderError.make({ kind, message, retryable, ...(cause === undefined ? {} : { cause }) })
+const isError = Schema.is(ProviderError)
 const rejected = (field: string): ProviderError => fail("unsupported", `Cannot map ${field} to Anthropic Messages`)
 const malformed = (field: string): ProviderError => fail("invalid_request", `Invalid ${field}`)
 
@@ -100,7 +104,7 @@ const append = (messages: readonly Message[], role: Message["role"], block: Anth
 const wireMessage = (message: Message) => ({ role: message.role, content: message.content.value })
 
 /** Convert portable OpenResponses input into a stateless Anthropic Messages request. */
-export function toMessagesRequest(request: ModelRequest, defaultMaxTokens: number): Result.Result<Record<string, unknown>, ProviderError> {
+export function toMessagesRequest(request: GenerationRequest, defaultMaxTokens: number): Result.Result<Record<string, unknown>, ProviderError> {
   return Result.gen(function* () {
     const allowed = ["model", "input", "instructions", "tools", "tool_choice", "text", "max_output_tokens", "temperature", "top_p", "parallel_tool_calls", "stream", "store"] as const
     const extra = Object.entries(request).find(([key, value]) => value !== undefined && !allowed.includes(key as (typeof allowed)[number]))
@@ -108,7 +112,7 @@ export function toMessagesRequest(request: ModelRequest, defaultMaxTokens: numbe
     if (request.store === true) return yield* Result.fail(rejected("store: true"))
     const max = request.max_output_tokens ?? defaultMaxTokens
     if (!Number.isInteger(max) || max < 16) return yield* Result.fail(malformed("max_output_tokens"))
-    const input: readonly InputItem[] = typeof request.input === "string" ? [{ type: "message", role: "user", content: request.input }] : (request.input ?? [])
+    const input: readonly GenerationInputItem[] = typeof request.input === "string" ? [{ type: "message", role: "user", content: request.input }] : (request.input ?? [])
     const converted = yield* input.reduce<Result.Result<State, ProviderError>>(
       (previous, item, index) =>
         Result.gen(function* () {
@@ -404,6 +408,44 @@ function events(bytes: Stream.Stream<Uint8Array, unknown>): Stream.Stream<Native
   )
 }
 
+interface NativeFrameState {
+  readonly started: boolean
+  readonly finished: boolean
+  readonly pending: readonly Uint8Array[]
+}
+
+const initialNativeFrameState = (): NativeFrameState => ({ started: false, finished: false, pending: [] })
+
+const nativeFrames = (bytes: Stream.Stream<Uint8Array, unknown>): Stream.Stream<Uint8Array, ProviderError> => {
+  const frames = bytes.pipe(Stream.decodeText(), Stream.pipeThroughChannel(Sse.decode({ maxEventSize: 1024 * 1024 })))
+  return Stream.concat(
+    Stream.map(frames, (frame) => ({ kind: "frame" as const, frame })),
+    Stream.succeed({ kind: "end" as const }),
+  ).pipe(
+    Stream.mapAccumEffect(initialNativeFrameState, (state, entry) =>
+      Effect.gen(function* () {
+        if (entry.kind === "end") {
+          if (!state.finished) return yield* Effect.fail(fail("unknown", "Anthropic stream ended without message_stop"))
+          return [state, state.pending] as const
+        }
+        if (state.finished) return yield* Effect.fail(fail("unknown", "Events followed message_stop"))
+        const event = yield* Effect.fromResult(Result.mapError(Schema.decodeUnknownResult(Schema.fromJsonString(AnthropicEvent))(entry.frame.data), (error) => fail("unknown", fromSchema(error, "event").message, false, error)))
+        if (entry.frame.event !== event.type) return yield* Effect.fail(fail("unknown", "Anthropic SSE event mismatch"))
+        if (event.type === "error") return yield* Effect.fail(fail("unavailable", event.error.message))
+        if (event.type === "message_start") {
+          if (state.started) return yield* Effect.fail(fail("unknown", "Duplicate message_start"))
+          return [{ ...state, started: true }, [new TextEncoder().encode(Sse.encoder.write({ _tag: "Event", event: entry.frame.event, id: entry.frame.id, data: entry.frame.data }))]] as const
+        }
+        if (event.type !== "ping" && !state.started) return yield* Effect.fail(fail("unknown", "Anthropic output before message_start"))
+        const encoded = new TextEncoder().encode(Sse.encoder.write({ _tag: "Event", event: entry.frame.event, id: entry.frame.id, data: entry.frame.data }))
+        if (event.type === "message_stop") return [{ ...state, finished: true, pending: [...state.pending, encoded] }, []] as const
+        return [state, [encoded]] as const
+      }),
+    ),
+    Stream.mapError((cause): ProviderError => (isError(cause) ? cause : fail("unknown", "Anthropic native stream failed", false, cause))),
+  )
+}
+
 function statusError(status: number): ProviderError {
   if (status === 429 || status === 529) return fail("rate_limited", "Anthropic rate limited the request", true)
   if (status === 401 || status === 403) return fail("unauthorized", "Anthropic authentication failed")
@@ -424,6 +466,19 @@ export function make(config: AnthropicMessagesDeploymentConfig): Result.Result<A
     protocol: "anthropic.messages",
     model: parsed.success.model,
     execute: {
+      direct: (request) =>
+        Effect.gen(function* () {
+          const body = yield* Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Unknown))(request.body).pipe(Effect.mapError((cause) => fail("invalid_request", cause.message, false, cause)))
+          const client = yield* HttpClient.HttpClient
+          const outgoing = HttpClientRequest.post(url.toString()).pipe(HttpClientRequest.setHeader("x-api-key", Redacted.value(parsed.success.apiKey)), HttpClientRequest.setHeader("anthropic-version", parsed.success.version ?? "2023-06-01"), HttpClientRequest.setHeader("content-type", "application/json"), HttpClientRequest.bodyJsonUnsafe({ ...body, model: request.targetModel }))
+          const response = yield* client.execute(outgoing).pipe(Effect.mapError((cause) => fail("unavailable", "Anthropic connection failed", false, cause)))
+          if (response.status < 200 || response.status >= 300) return yield* Effect.fail(statusError(response.status))
+          return {
+            status: response.status,
+            headers: Object.fromEntries(Object.entries(response.headers)),
+            body: nativeFrames(response.stream),
+          }
+        }),
       http: (request) =>
         Effect.gen(function* () {
           const parsedRequest = yield* Schema.decodeUnknownEffect(Request)(request).pipe(Effect.mapError((cause) => fail("invalid_request", cause.message, false, cause)))

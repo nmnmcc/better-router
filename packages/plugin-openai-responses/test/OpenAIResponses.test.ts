@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { it } from "@effect/vitest"
 import { Effect, Redacted, Ref, Result, Schema, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import { snapshot } from "@better-router/core/ModelEvents"
+import { snapshot } from "@better-router/core/GenerationEvents"
 import { make, OpenAIResponsesInvalidDeploymentUrl } from "@better-router/plugin-openai-responses/OpenAIResponses"
 
 const executor = () => {
@@ -14,6 +14,7 @@ const executor = () => {
 it("invalid deployment URLs produce schema-backed errors", () => {
   const result = make({ id: "bad", model: "private", apiKey: Redacted.make("secret"), url: new URL("ftp://example.com") })
   if (Result.isSuccess(result)) return assert.fail("Expected invalid deployment")
+  assert.equal(result.failure instanceof Error, true)
   assert.deepEqual(Schema.encodeSync(OpenAIResponsesInvalidDeploymentUrl)(result.failure), {
     _tag: "OpenAIResponsesInvalidDeploymentUrl",
     message: "Responses URL must use HTTP(S)",

@@ -13,7 +13,7 @@ LiteLLM 源码依据是仓库镜像提交 [`09ebb28473e6e9e09c80ce2f822b88d8bc24
 3. **Provider deployment plugin**：LiteLLM 官方 README 声称支持 100+ LLM；镜像的 `litellm/llms/` 有 137 个顶层目录（其中包含 `base_llm` 和 `deprecated_providers`），每个部署需要认证、请求转换、流式事件、错误分类、能力声明和成本计算
 4. **Gateway 横切 plugin/service**：路由重试和 fallback、健康检查、缓存、Guardrails/Policy、虚拟 key 和 RBAC、预算和 spend、回调/OTel/Prometheus、配置/密钥、模型管理、审计/合规和可观测管理端点
 
-当前 core 的 plugin 只能在路由创建时声明 `deployments`、`policies`、`transforms`、`http` 和资源 `start` effect（见 [`Plugin.ts`](../../packages/core/src/Plugin.ts)）。因此下面的“建议 plugin”是按 API/资源边界拆出的候选包，不要求每一行都变成独立 npm package；同一协议的管理端点和执行器可以共用一个 package，但不能把 Provider 特有语义藏在通用转换器中
+当前 core 的 plugin 在路由创建时声明 `deployments`、`policies`、`middleware`、`projections`、`http` 和资源 `start` effect（见 [`Plugin.ts`](../../packages/core/src/Plugin.ts)）。因此下面的“建议 plugin”是按 API/资源边界拆出的候选包，不要求每一行都变成独立 npm package；同一协议的管理端点和执行器可以共用一个 package，但不能把 Provider 特有语义藏在通用转换器中
 
 ## 当前基线
 
@@ -28,9 +28,9 @@ LiteLLM 的 README 将 Proxy 的关键能力概括为统一 API、100+ 模型、
 
 ### 当前 core 的结构性缺口
 
-better-router 的 [`ModelRequest`](../../packages/core/src/Model.ts#L38-L43)、[`ModelResponse`](../../packages/core/src/Model.ts#L45-L49) 和 [`ModelEvent`](../../packages/core/src/Model.ts#L51-L54) 固定在 OpenResponses IR；[`ModelDeployment`](../../packages/core/src/Deployment.ts#L32-L41) 的 executor 也固定为 `ModelRequest -> Stream<ModelEvent>`，上游 transport 只有 HTTP/WebSocket（[`Deployment.ts#L5-L15`](../../packages/core/src/Deployment.ts#L5-L15)）。这对三类文本/工具协议足够，但不能直接表达 embeddings 数组、audio/video binary、multipart 文件、异步 batch/fine-tuning job、vector-store CRUD 或 provider-native search/OCR 结果
+better-router 当前的 `generation` capability 定义了 [`GenerationRequest`](../../packages/core/src/Generation.ts)、[`GenerationResponse`](../../packages/core/src/Generation.ts) 和 [`GenerationEvent`](../../packages/core/src/Generation.ts) 语义 ABI；它不再依赖某个 wire 规范。现有 [`Deployment`](../../packages/core/src/Deployment.ts) 的 generation executor 仍是 `GenerationRequest -> Stream<GenerationEvent>`，上游 transport 只有 HTTP/WebSocket（[`Deployment.ts`](../../packages/core/src/Deployment.ts)）。这对三类文本/工具协议足够，但不能直接表达 embeddings 数组、audio/video binary、multipart 文件、异步 batch/fine-tuning job、vector-store CRUD 或 provider-native search/OCR 结果；这些应由插件注册新的 capability 与专属 execution value，而不是扩张 generation ABI
 
-HTTP plugin 可以通过 [`HttpContribution`](../../packages/core/src/Http.ts#L7-L14) 添加 typed API 和 raw route，但当前 `HttpHostServices` 没有针对 multipart、binary、WebSocket session/job polling 的统一领域结果；因此 endpoint plugin 需要自己的 Schema/资源服务，或先扩展 core 的协议无关 capability。当前 [`Plugin.ts`](../../packages/core/src/Plugin.ts#L9-L21) 只能静态声明 deployments/policies/transforms/http 和 acquisition effect，不能在运行时追加 LiteLLM 那种动态 model/key/tool registry。仓库架构文档也明确当前只支持 Chat、Responses、Anthropic 三个 HTTP endpoint（[`docs/architecture.md`](../architecture.md#protocol-adapters)）
+HTTP plugin 可以通过 [`HttpContribution`](../../packages/core/src/Http.ts#L7-L14) 添加 typed API 和 raw route，但当前 `HttpHostServices` 没有针对 multipart、binary、WebSocket session/job polling 的统一领域结果；因此 endpoint plugin 需要自己的 Schema/资源服务，或先扩展 core 的协议无关 capability。当前 [`Plugin.ts`](../../packages/core/src/Plugin.ts#L9-L21) 只能静态声明 deployments/policies/middleware/projections/http 和 acquisition effect，不能在运行时追加 LiteLLM 那种动态 model/key/tool registry。仓库架构文档也明确当前只支持 Chat、Responses、Anthropic 三个 HTTP endpoint（[`docs/architecture.md`](../architecture.md#protocol-adapters)）
 
 ## 端点与协议 plugin
 
@@ -66,7 +66,7 @@ HTTP plugin 可以通过 [`HttpContribution`](../../packages/core/src/Http.ts#L7
 
 ### 端点之外的 SDK 能力
 
-LiteLLM SDK 还公开同步/异步 completion、统一异常、token counter、模型成本和 Provider 参数能力查询。它们应成为 core service 或独立 `plugin-sdk-utilities`，不能只实现 HTTP ingress，否则 in-process `router.complete` 与 Proxy 的成本/usage 会不一致。主要来源是 [`litellm/main.py`](../../references/litellm/litellm/main.py)、[`litellm_core_utils/token_counter.py`](../../references/litellm/litellm/litellm_core_utils/token_counter.py)、[`get_model_cost_map.py`](../../references/litellm/litellm/litellm_core_utils/get_model_cost_map.py)、[`get_supported_openai_params.py`](../../references/litellm/litellm/litellm_core_utils/get_supported_openai_params.py)
+LiteLLM SDK 还公开同步/异步 completion、统一异常、token counter、模型成本和 Provider 参数能力查询。它们应成为 core service 或独立 `plugin-sdk-utilities`，不能只实现 HTTP ingress，否则 in-process `router.invoke` 与 Proxy 的成本/usage 会不一致。主要来源是 [`litellm/main.py`](../../references/litellm/litellm/main.py)、[`litellm_core_utils/token_counter.py`](../../references/litellm/litellm/litellm_core_utils/token_counter.py)、[`get_model_cost_map.py`](../../references/litellm/litellm/litellm_core_utils/get_model_cost_map.py)、[`get_supported_openai_params.py`](../../references/litellm/litellm/litellm_core_utils/get_supported_openai_params.py)
 
 ## Provider deployment plugin
 

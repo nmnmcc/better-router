@@ -31,4 +31,4 @@ devenv shell -- yarn generate:openresponses --check
 devenv shell -- yarn test:coverage
 ```
 
-`check` builds, compiles workspace and test TypeScript, runs TSTyche, then runs every package and local-host runtime test. `test:coverage` builds and produces terminal and ignored `coverage/` HTML reports for package source, excluding generated OpenResponses types and barrel files. Coverage has no percentage gate; inspect the report for missed behavior. CI runs the same immutable install and checks and uploads the report.
+`check` builds, compiles workspace and test TypeScript, runs TSTyche, then runs every package and local-host runtime test. `test:coverage` builds and produces terminal and ignored `coverage/` HTML reports for package source, excluding generated Responses wire types and barrel files. Coverage has no percentage gate; inspect the report for missed behavior. CI runs the same immutable install and checks and uploads the report.

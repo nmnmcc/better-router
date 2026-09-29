@@ -5,6 +5,7 @@ import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import { it as test } from "@effect/vitest"
 import { Effect, Redacted, Ref, Result } from "effect"
 import { make as makeRouter } from "@better-router/core/Router"
+import { complete as completeGeneration } from "@better-router/core/Execution"
 import { AnthropicMessages, AnthropicMessagesPlugin } from "@better-router/plugin-anthropic-messages"
 
 test.effect("Anthropic deployment streams native Messages events into a complete response", () =>
@@ -43,7 +44,8 @@ test.effect("Anthropic deployment streams native Messages events into a complete
         plugins: [AnthropicMessagesPlugin.make({ deployments: [deployment.success] })],
         routes: [{ model: "public", deployments: ["anthropic-upstream"] }],
       }).pipe(
-        Effect.flatMap((router) => router.complete({ model: "public", input: "Hi" })),
+        Effect.flatMap((router) => router.invoke({ type: "generation", request: { model: "public", input: "Hi" } })),
+        Effect.flatMap((execution) => (execution.type === "generation" ? completeGeneration(execution.events) : Effect.die("Expected generation execution"))),
         Effect.provide(NodeHttpClient.layerUndici),
       )
       assert.equal(result.status, "completed")

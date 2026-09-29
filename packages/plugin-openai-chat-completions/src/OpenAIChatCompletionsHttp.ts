@@ -2,14 +2,17 @@ import { Effect, HashMap, Layer, Option, Redacted, Result, Schema, Stream } from
 import { Sse } from "effect/unstable/encoding"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
-import { ConversionError, fromSchema } from "@better-router/core/Conversion"
+import { ConversionError, at, fromSchema } from "@better-router/core/Conversion"
 import type { HttpContribution } from "@better-router/core/Http"
 import { HttpJsonError, read as readJson } from "@better-router/core/HttpJson"
-import type { ModelEvent, ModelResponse } from "@better-router/core/Model"
-import { Event, Response } from "@better-router/core/ModelSchema"
+import type { GenerationEvent, GenerationResponse } from "@better-router/core/Generation"
+import { Event, Response } from "@better-router/core/GenerationSchema"
+import type { ProtocolDefinition } from "@better-router/core/Projection"
 import { RouterError } from "@better-router/core/Router"
 import type { Router } from "@better-router/core/Router"
-import { parseRequest } from "./OpenAIChatCompletions.js"
+import { complete as completeGeneration } from "@better-router/core/Execution"
+import type { Execution } from "@better-router/core/Execution"
+import { parseRequest, toNativeRequest } from "./OpenAIChatCompletions.js"
 
 export interface OpenAIChatCompletionsHttpOptions {
   readonly gatewayKey: Redacted.Redacted<string>
@@ -31,15 +34,22 @@ export const api = HttpApi.make("openai-chat-completions").add(
   ),
 )
 
-export const OpenAIChatCompletionsUpstreamResponseError = Schema.Struct({
-  _tag: Schema.Literal("OpenAIChatCompletionsUpstreamResponseError"),
+export class OpenAIChatCompletionsUpstreamResponseError extends Schema.TaggedError<OpenAIChatCompletionsUpstreamResponseError>()("OpenAIChatCompletionsUpstreamResponseError", {
   message: Schema.String,
-})
-export type OpenAIChatCompletionsUpstreamResponseError = typeof OpenAIChatCompletionsUpstreamResponseError.Type
+}) {}
+
+export const projection: ProtocolDefinition<string, Completion> = {
+  id: "openai.chat-completions",
+  protocol: "openai.chat-completions",
+  capability: "generation",
+  decode: (value) => parseRequest(value).pipe(Result.map(({ request }) => request)),
+  encodeEvent: () => Result.fail(at("event", "unsupported", "Chat Completions event encoding requires stream state")),
+  encodeResponse: (response) => Result.mapError(toChatCompletion(response), (error) => at("response", "unsupported", error.message)),
+  encodeEvents: (events, context) => chatFrames(events, context.model, context.includeUsage === true),
+}
 
 const upstreamError = (message: string) =>
   OpenAIChatCompletionsUpstreamResponseError.make({
-    _tag: "OpenAIChatCompletionsUpstreamResponseError",
     message,
   })
 
@@ -54,7 +64,7 @@ interface Output {
   readonly tool_calls: readonly Call[]
 }
 
-function projectOutput(response: ModelResponse): Result.Result<Output, OpenAIChatCompletionsUpstreamResponseError> {
+function projectOutput(response: GenerationResponse): Result.Result<Output, OpenAIChatCompletionsUpstreamResponseError> {
   return response.output.reduce<Result.Result<Output, OpenAIChatCompletionsUpstreamResponseError>>(
     (previous, item, index) =>
       Result.gen(function* () {
@@ -147,7 +157,7 @@ const send = (state: FrameState, delta: object, finish_reason: string | null = n
     (identity) => frame({ ...identity, object: "chat.completion.chunk", choices: [{ index: 0, delta, finish_reason }] }),
   )
 
-function project(state: FrameState, event: ModelEvent | { readonly type: "end" }, model: string, includeUsage: boolean): Result.Result<readonly [FrameState, readonly string[]], OpenAIChatCompletionsUpstreamResponseError> {
+function project(state: FrameState, event: GenerationEvent | { readonly type: "end" }, model: string, includeUsage: boolean): Result.Result<readonly [FrameState, readonly string[]], OpenAIChatCompletionsUpstreamResponseError> {
   return Result.gen(function* () {
     if (event.type === "end") {
       if (!state.finished) return yield* Result.fail(upstreamError("Upstream stream ended without a terminal response"))
@@ -203,7 +213,7 @@ function project(state: FrameState, event: ModelEvent | { readonly type: "end" }
   })
 }
 
-const chatFrames = (source: Stream.Stream<ModelEvent, RouterError>, model: string, includeUsage: boolean): Stream.Stream<string> =>
+const chatFrames = (source: Stream.Stream<GenerationEvent, unknown>, model: string, includeUsage: boolean): Stream.Stream<string> =>
   Stream.concat(source, Stream.succeed({ type: "end" as const })).pipe(
     Stream.mapAccumEffect(initial, (state, event) => Effect.fromResult(project(state, event, model, includeUsage))),
     Stream.catch((error) =>
@@ -235,7 +245,7 @@ function onError(error: unknown): HttpServerResponse.HttpServerResponse {
       ProviderFailed: ({ cause }) => errorResponse(cause.kind === "rate_limited" ? 429 : cause.kind === "timeout" ? 504 : cause.kind === "unavailable" ? 503 : cause.kind === "invalid_request" ? 400 : cause.kind === "unsupported" ? 422 : 502, cause.message, "upstream_error"),
       InvalidResponse: () => errorResponse(502, "Model execution failed", "upstream_error"),
       RoutingFailed: () => errorResponse(502, "Model execution failed", "upstream_error"),
-      TransformFailed: () => errorResponse(502, "Model execution failed", "upstream_error"),
+      MiddlewareFailed: () => errorResponse(502, "Model execution failed", "upstream_error"),
     })
   return errorResponse(500, "Gateway failed", "server_error")
 }
@@ -243,18 +253,44 @@ function onError(error: unknown): HttpServerResponse.HttpServerResponse {
 const handle = (router: Router, request: HttpServerRequest.HttpServerRequest, key: Redacted.Redacted<string>) =>
   Effect.gen(function* () {
     const value = yield* readJson(request, request.headers.authorization === "Bearer " + Redacted.value(key))
+    const nativeRequest = yield* Effect.fromResult(toNativeRequest(value))
+    const direct = nativeRequest.stream === true ? Option.some(yield* router.invoke({ type: "protocol", request: { protocol: "openai.chat-completions", model: nativeRequest.model, body: value, headers: Object.fromEntries(Object.entries(request.headers)) } })) : Option.none<Execution>()
+    if (Option.isSome(direct) && direct.value.type === "opaque") {
+      const body = direct.value.response.body.pipe(
+        Stream.catch((error) =>
+          Stream.succeed(
+            new TextEncoder().encode(
+              frame(
+                OpenAIChatCompletionsHttpError.make({
+                  error: { message: error instanceof Error ? error.message : "Upstream stream failed", type: "upstream_error" },
+                }),
+              ),
+            ),
+          ),
+        ),
+      )
+      return HttpServerResponse.stream(body, {
+        status: direct.value.response.status,
+        headers: direct.value.response.headers,
+        contentType: direct.value.response.headers["content-type"],
+      })
+    }
     const parsed = yield* Effect.fromResult(parseRequest(value))
     if (parsed.ingress.hasStreamOptions && !parsed.ingress.stream) return errorResponse(400, "Invalid stream_options", "invalid_request_error")
     const converted = parsed.request
     const invocation = { ...converted, store: converted.store ?? false }
     if (converted.stream) {
-      const source = yield* router.open(invocation)
-      return HttpServerResponse.stream(chatFrames(source, converted.model, parsed.ingress.includeUsage).pipe(Stream.encodeText), {
+      const execution = Option.isSome(direct) ? direct.value : yield* router.invoke({ type: "generation", request: invocation })
+      if (execution.type !== "generation") return yield* Effect.fail(RouterError.cases.InvalidResponse.make({ message: "Expected generation events" }))
+      const source = execution.events
+      return HttpServerResponse.stream(projection.encodeEvents!(source, { model: converted.model, includeUsage: parsed.ingress.includeUsage }).pipe(Stream.encodeText), {
         headers: { "cache-control": "no-cache", "x-accel-buffering": "no" },
         contentType: "text/event-stream; charset=utf-8",
       })
     }
-    const response = yield* router.complete(invocation)
+    const execution = yield* router.invoke({ type: "generation", request: invocation })
+    if (execution.type !== "generation") return yield* Effect.fail(RouterError.cases.InvalidResponse.make({ message: "Expected generation events" }))
+    const response = yield* completeGeneration(execution.events)
     return HttpServerResponse.jsonUnsafe(yield* Effect.fromResult(toChatCompletion(response, converted.model)))
   }).pipe(Effect.catch((error) => Effect.succeed(onError(error))))
 

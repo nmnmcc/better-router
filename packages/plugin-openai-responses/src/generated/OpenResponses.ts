@@ -155,13 +155,7 @@ export interface components {
        */
       readonly role: "user"
       /** @description The message content, as an array of content parts. */
-      readonly content:
-        | readonly (
-            | components["schemas"]["InputTextContentParam"]
-            | components["schemas"]["InputImageContentParamAutoParam"]
-            | components["schemas"]["InputFileContentParam"]
-          )[]
-        | string
+      readonly content: readonly (components["schemas"]["InputTextContentParam"] | components["schemas"]["InputImageContentParamAutoParam"] | components["schemas"]["InputFileContentParam"])[] | string
       readonly status?: string | null
     }
     readonly SystemMessageItemParam: {
@@ -253,9 +247,7 @@ export interface components {
        */
       readonly role: "assistant"
       /** @description The message content, as an array of content parts. */
-      readonly content:
-        | readonly (components["schemas"]["OutputTextContentParam"] | components["schemas"]["RefusalContentParam"])[]
-        | string
+      readonly content: readonly (components["schemas"]["OutputTextContentParam"] | components["schemas"]["RefusalContentParam"])[] | string
       /**
        * @description Labels an `assistant` message as intermediate commentary (`commentary`) or the final answer (`final_answer`). For models like `gpt-5.3-codex` and beyond, when sending follow-up requests, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages.
        * @enum {string}
@@ -296,26 +288,10 @@ export interface components {
        */
       readonly type: "function_call_output"
       /** @description Text, image, or file output of the function tool call. */
-      readonly output:
-        | string
-        | readonly (
-            | components["schemas"]["InputTextContentParam"]
-            | components["schemas"]["InputImageContentParamAutoParam"]
-            | components["schemas"]["InputFileContentParam"]
-            | components["schemas"]["InputVideoContent"]
-          )[]
+      readonly output: string | readonly (components["schemas"]["InputTextContentParam"] | components["schemas"]["InputImageContentParamAutoParam"] | components["schemas"]["InputFileContentParam"] | components["schemas"]["InputVideoContent"])[]
       readonly status?: (components["schemas"]["FunctionCallStatus"] & unknown) | null
     }
-    readonly ItemParam:
-      | components["schemas"]["ItemReferenceParam"]
-      | components["schemas"]["ReasoningItemParam"]
-      | components["schemas"]["CompactionSummaryItemParam"]
-      | components["schemas"]["UserMessageItemParam"]
-      | components["schemas"]["SystemMessageItemParam"]
-      | components["schemas"]["DeveloperMessageItemParam"]
-      | components["schemas"]["AssistantMessageItemParam"]
-      | components["schemas"]["FunctionCallItemParam"]
-      | components["schemas"]["FunctionCallOutputItemParam"]
+    readonly ItemParam: components["schemas"]["ItemReferenceParam"] | components["schemas"]["ReasoningItemParam"] | components["schemas"]["CompactionSummaryItemParam"] | components["schemas"]["UserMessageItemParam"] | components["schemas"]["SystemMessageItemParam"] | components["schemas"]["DeveloperMessageItemParam"] | components["schemas"]["AssistantMessageItemParam"] | components["schemas"]["FunctionCallItemParam"] | components["schemas"]["FunctionCallOutputItemParam"]
     /** @enum {string} */
     readonly IncludeEnum: "reasoning.encrypted_content" | "message.output_text.logprobs"
     readonly EmptyModelParam: {
@@ -358,10 +334,7 @@ export interface components {
       readonly mode?: components["schemas"]["ToolChoiceValueEnum"] & unknown
     }
     /** @description Controls which tool the model should use, if any. */
-    readonly ToolChoiceParam:
-      | components["schemas"]["SpecificToolChoiceParam"]
-      | components["schemas"]["ToolChoiceValueEnum"]
-      | components["schemas"]["AllowedToolsParam"]
+    readonly ToolChoiceParam: components["schemas"]["SpecificToolChoiceParam"] | components["schemas"]["ToolChoiceValueEnum"] | components["schemas"]["AllowedToolsParam"]
     /**
      * @description Set of 16 key-value pairs that can be attached to an object. This can be         useful for storing additional information about the object in a structured         format, and querying for objects via API or the dashboard.
      *             Keys are strings with a maximum length of 64 characters. Values are strings         with a maximum length of 512 characters.
@@ -655,17 +628,7 @@ export interface components {
       readonly status: components["schemas"]["MessageStatus"] & unknown
       readonly role: components["schemas"]["MessageRole"] & unknown
       /** @description The content of the message */
-      readonly content: readonly (
-        | components["schemas"]["InputTextContent"]
-        | components["schemas"]["OutputTextContent"]
-        | components["schemas"]["TextContent"]
-        | components["schemas"]["SummaryTextContent"]
-        | components["schemas"]["ReasoningTextContent"]
-        | components["schemas"]["RefusalContent"]
-        | components["schemas"]["InputImageContent"]
-        | components["schemas"]["InputFileContent"]
-        | components["schemas"]["InputVideoContent"]
-      )[]
+      readonly content: readonly (components["schemas"]["InputTextContent"] | components["schemas"]["OutputTextContent"] | components["schemas"]["TextContent"] | components["schemas"]["SummaryTextContent"] | components["schemas"]["ReasoningTextContent"] | components["schemas"]["RefusalContent"] | components["schemas"]["InputImageContent"] | components["schemas"]["InputFileContent"] | components["schemas"]["InputVideoContent"])[]
       /**
        * @description Labels an `assistant` message as intermediate commentary (`commentary`) or the final answer (`final_answer`). For models like `gpt-5.3-codex` and beyond, when sending follow-up requests, preserve and resend phase on all assistant messages. Omitting it can degrade performance. Not used for user messages.
        * @enum {string}
@@ -715,13 +678,7 @@ export interface components {
       readonly id: string
       /** @description The unique ID of the function tool call generated by the model. */
       readonly call_id: string
-      readonly output:
-        | string
-        | readonly (
-            | components["schemas"]["InputTextContent"]
-            | components["schemas"]["InputImageContent"]
-            | components["schemas"]["InputFileContent"]
-          )[]
+      readonly output: string | readonly (components["schemas"]["InputTextContent"] | components["schemas"]["InputImageContent"] | components["schemas"]["InputFileContent"])[]
       readonly status: components["schemas"]["FunctionCallOutputStatusEnum"] & unknown
     }
     /**
@@ -738,27 +695,9 @@ export interface components {
       /** @description The unique ID of the reasoning item. */
       readonly id: string
       /** @description The reasoning content that was generated. */
-      readonly content?: readonly (
-        | components["schemas"]["InputTextContent"]
-        | components["schemas"]["OutputTextContent"]
-        | components["schemas"]["TextContent"]
-        | components["schemas"]["SummaryTextContent"]
-        | components["schemas"]["ReasoningTextContent"]
-        | components["schemas"]["RefusalContent"]
-        | components["schemas"]["InputImageContent"]
-        | components["schemas"]["InputFileContent"]
-      )[]
+      readonly content?: readonly (components["schemas"]["InputTextContent"] | components["schemas"]["OutputTextContent"] | components["schemas"]["TextContent"] | components["schemas"]["SummaryTextContent"] | components["schemas"]["ReasoningTextContent"] | components["schemas"]["RefusalContent"] | components["schemas"]["InputImageContent"] | components["schemas"]["InputFileContent"])[]
       /** @description The reasoning summary content that was generated. */
-      readonly summary: readonly (
-        | components["schemas"]["InputTextContent"]
-        | components["schemas"]["OutputTextContent"]
-        | components["schemas"]["TextContent"]
-        | components["schemas"]["SummaryTextContent"]
-        | components["schemas"]["ReasoningTextContent"]
-        | components["schemas"]["RefusalContent"]
-        | components["schemas"]["InputImageContent"]
-        | components["schemas"]["InputFileContent"]
-      )[]
+      readonly summary: readonly (components["schemas"]["InputTextContent"] | components["schemas"]["OutputTextContent"] | components["schemas"]["TextContent"] | components["schemas"]["SummaryTextContent"] | components["schemas"]["ReasoningTextContent"] | components["schemas"]["RefusalContent"] | components["schemas"]["InputImageContent"] | components["schemas"]["InputFileContent"])[]
       /** @description The encrypted reasoning content that was generated. */
       readonly encrypted_content?: string
     }
@@ -781,12 +720,7 @@ export interface components {
       readonly created_by?: string
     }
     /** @description An item representing a message, tool call, tool output, reasoning, or other response element. */
-    readonly ItemField:
-      | components["schemas"]["Message"]
-      | components["schemas"]["FunctionCall"]
-      | components["schemas"]["FunctionCallOutput"]
-      | components["schemas"]["ReasoningBody"]
-      | components["schemas"]["CompactionBody"]
+    readonly ItemField: components["schemas"]["Message"] | components["schemas"]["FunctionCall"] | components["schemas"]["FunctionCallOutput"] | components["schemas"]["ReasoningBody"] | components["schemas"]["CompactionBody"]
     /**
      * Error
      * @description An error that occurred while generating the response.
@@ -861,10 +795,7 @@ export interface components {
       readonly strict: boolean
     }
     readonly TextField: {
-      readonly format:
-        | components["schemas"]["TextResponseFormat"]
-        | components["schemas"]["JsonObjectResponseFormat"]
-        | components["schemas"]["JsonSchemaResponseFormat"]
+      readonly format: components["schemas"]["TextResponseFormat"] | components["schemas"]["JsonObjectResponseFormat"] | components["schemas"]["JsonSchemaResponseFormat"]
       readonly verbosity?: components["schemas"]["VerbosityEnum"]
     }
     /**
@@ -986,10 +917,7 @@ export interface components {
       readonly error: (components["schemas"]["Error"] & unknown) | null
       /** @description The tools that were available to the model during response generation. */
       readonly tools: readonly components["schemas"]["Tool"][]
-      readonly tool_choice:
-        | components["schemas"]["FunctionToolChoice"]
-        | components["schemas"]["ToolChoiceValueEnum"]
-        | components["schemas"]["AllowedToolChoice"]
+      readonly tool_choice: components["schemas"]["FunctionToolChoice"] | components["schemas"]["ToolChoiceValueEnum"] | components["schemas"]["AllowedToolChoice"]
       readonly truncation: components["schemas"]["TruncationEnum"] & unknown
       /** @description Whether the model was allowed to call multiple tools in parallel. */
       readonly parallel_tool_calls: boolean
@@ -1163,15 +1091,7 @@ export interface components {
       /** @description The index of the summary part that was added. */
       readonly summary_index: number
       /** @description A content part that makes up an input or output item. */
-      readonly part:
-        | components["schemas"]["InputTextContent"]
-        | components["schemas"]["OutputTextContent"]
-        | components["schemas"]["TextContent"]
-        | components["schemas"]["SummaryTextContent"]
-        | components["schemas"]["ReasoningTextContent"]
-        | components["schemas"]["RefusalContent"]
-        | components["schemas"]["InputImageContent"]
-        | components["schemas"]["InputFileContent"]
+      readonly part: components["schemas"]["InputTextContent"] | components["schemas"]["OutputTextContent"] | components["schemas"]["TextContent"] | components["schemas"]["SummaryTextContent"] | components["schemas"]["ReasoningTextContent"] | components["schemas"]["RefusalContent"] | components["schemas"]["InputImageContent"] | components["schemas"]["InputFileContent"]
     }
     /**
      * Response reasoning summary part done event
@@ -1193,15 +1113,7 @@ export interface components {
       /** @description The index of the summary part that was completed. */
       readonly summary_index: number
       /** @description A content part that makes up an input or output item. */
-      readonly part:
-        | components["schemas"]["InputTextContent"]
-        | components["schemas"]["OutputTextContent"]
-        | components["schemas"]["TextContent"]
-        | components["schemas"]["SummaryTextContent"]
-        | components["schemas"]["ReasoningTextContent"]
-        | components["schemas"]["RefusalContent"]
-        | components["schemas"]["InputImageContent"]
-        | components["schemas"]["InputFileContent"]
+      readonly part: components["schemas"]["InputTextContent"] | components["schemas"]["OutputTextContent"] | components["schemas"]["TextContent"] | components["schemas"]["SummaryTextContent"] | components["schemas"]["ReasoningTextContent"] | components["schemas"]["RefusalContent"] | components["schemas"]["InputImageContent"] | components["schemas"]["InputFileContent"]
     }
     /**
      * Response content part added event
@@ -1223,15 +1135,7 @@ export interface components {
       /** @description The index of the content part that was added. */
       readonly content_index: number
       /** @description A content part that makes up an input or output item. */
-      readonly part:
-        | components["schemas"]["InputTextContent"]
-        | components["schemas"]["OutputTextContent"]
-        | components["schemas"]["TextContent"]
-        | components["schemas"]["SummaryTextContent"]
-        | components["schemas"]["ReasoningTextContent"]
-        | components["schemas"]["RefusalContent"]
-        | components["schemas"]["InputImageContent"]
-        | components["schemas"]["InputFileContent"]
+      readonly part: components["schemas"]["InputTextContent"] | components["schemas"]["OutputTextContent"] | components["schemas"]["TextContent"] | components["schemas"]["SummaryTextContent"] | components["schemas"]["ReasoningTextContent"] | components["schemas"]["RefusalContent"] | components["schemas"]["InputImageContent"] | components["schemas"]["InputFileContent"]
     }
     /**
      * Response content part done event
@@ -1253,15 +1157,7 @@ export interface components {
       /** @description The index of the content part that was completed. */
       readonly content_index: number
       /** @description A content part that makes up an input or output item. */
-      readonly part:
-        | components["schemas"]["InputTextContent"]
-        | components["schemas"]["OutputTextContent"]
-        | components["schemas"]["TextContent"]
-        | components["schemas"]["SummaryTextContent"]
-        | components["schemas"]["ReasoningTextContent"]
-        | components["schemas"]["RefusalContent"]
-        | components["schemas"]["InputImageContent"]
-        | components["schemas"]["InputFileContent"]
+      readonly part: components["schemas"]["InputTextContent"] | components["schemas"]["OutputTextContent"] | components["schemas"]["TextContent"] | components["schemas"]["SummaryTextContent"] | components["schemas"]["ReasoningTextContent"] | components["schemas"]["RefusalContent"] | components["schemas"]["InputImageContent"] | components["schemas"]["InputFileContent"]
     }
     /**
      * Response output text delta event
@@ -1641,8 +1537,7 @@ export interface components {
       }
       readonly strict?: boolean | null
     }
-    readonly TextFormatParam:
-      components["schemas"]["TextResponseFormat"] | components["schemas"]["JsonSchemaResponseFormatParam"]
+    readonly TextFormatParam: components["schemas"]["TextResponseFormat"] | components["schemas"]["JsonSchemaResponseFormatParam"]
   }
   responses: never
   parameters: never

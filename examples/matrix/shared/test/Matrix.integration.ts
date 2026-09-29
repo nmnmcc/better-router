@@ -4,7 +4,7 @@ import { once } from "node:events"
 import { createServer } from "node:http"
 import { test } from "vitest"
 import { Effect, Ref } from "effect"
-import { snapshot } from "@better-router/core/ModelEvents"
+import { snapshot } from "@better-router/core/GenerationEvents"
 import type { Protocol } from "../src/Matrix.js"
 
 function writeEvent(response: import("node:http").ServerResponse, type: string, data: unknown) {

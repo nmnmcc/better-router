@@ -1,12 +1,11 @@
 import { Result, Schema } from "effect"
 import type { SchemaIssue } from "effect"
 
-export const ConversionError = Schema.Struct({
+export class ConversionError extends Schema.TaggedError<ConversionError>()("ConversionError", {
   path: Schema.String,
   reason: Schema.Literals(["invalid", "unsupported"]),
   message: Schema.String,
-})
-export type ConversionError = typeof ConversionError.Type
+}) {}
 
 export const at = (path: string, reason: ConversionError["reason"], message: string): ConversionError => ConversionError.make({ path, reason, message: `${path}: ${message}` })
 

@@ -2,8 +2,8 @@ import assert from "node:assert/strict"
 import { it as test } from "@effect/vitest"
 import { Effect, Layer, Redacted, Ref, Stream } from "effect"
 import { HttpClient, HttpRouter, HttpServer } from "effect/unstable/http"
-import type { ModelEvent } from "@better-router/core/Model"
-import { snapshot } from "@better-router/core/ModelEvents"
+import type { GenerationEvent } from "@better-router/core/Generation"
+import { snapshot } from "@better-router/core/GenerationEvents"
 import { make as makeRouter } from "@better-router/core/Router"
 import { AnthropicMessagesPlugin } from "@better-router/plugin-anthropic-messages"
 
@@ -28,7 +28,7 @@ test.effect("Messages ingress authenticates, converts input, and emits native JS
                   { type: "response.output_text.delta", sequence_number: 2, item_id: "msg_1", output_index: 0, content_index: 0, delta: "Hello" },
                   { type: "response.output_item.done", sequence_number: 3, output_index: 0, item: output[0] },
                   { type: "response.completed", sequence_number: 4, response: snapshot({ model: "private" }, "resp_1", 1234, "private", output, "completed", usage, 1235) },
-                ] as ModelEvent[]),
+                ] as GenerationEvent[]),
               ),
             ),
         },

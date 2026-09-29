@@ -1,43 +1,74 @@
-import { Effect, HashMap, HashSet, Layer, Option, Result, Schema, Sink, Stream } from "effect"
+import { Context, Effect, HashMap, HashSet, Layer, Option, Result, Schema, Sink, Stream } from "effect"
 import type { Scope } from "effect"
 import { HttpApi } from "effect/unstable/httpapi"
 import { ProviderError } from "./Deployment.js"
-import type { DeploymentId, InvocationOptions, ModelDeployment } from "./Deployment.js"
+import type { InvocationOptions } from "./Deployment.js"
 import type { HttpHostServices } from "./Http.js"
-import type { ModelEvent, ModelName, ModelRequest, ModelResponse } from "./Model.js"
+import { ProtocolRequest } from "./Pipeline.js"
+import type { Handler } from "./Pipeline.js"
+import { toGeneration } from "./Projection.js"
+import type { Command } from "./Projection.js"
+import * as Execution from "./Execution.js"
+import type { Execution as ExecutionValue } from "./Execution.js"
+import type { GenerationEvent, GenerationRequest } from "./Generation.js"
 import { SetupError } from "./Plugin.js"
 import type { PluginRequirements, RouterPlugin } from "./Plugin.js"
+import * as Registry from "./Registry.js"
 import { RoutingError } from "./Routing.js"
 import type { ModelRoute } from "./Routing.js"
-import type { ModelHandler, ModelTransform } from "./Transform.js"
-import { Request } from "./ModelSchema.js"
+import { Request } from "./GenerationSchema.js"
 
-export const RouterError = Schema.TaggedUnion({
-  InvalidRequest: { message: Schema.String },
-  NoRoute: { model: Schema.String },
-  NoAvailableDeployment: { model: Schema.String },
-  UnsupportedCapability: { model: Schema.String, capability: Schema.String },
-  RoutingFailed: { cause: RoutingError },
-  ProviderFailed: { deployment: Schema.String, cause: ProviderError },
-  TransformFailed: { id: Schema.String, cause: Schema.Defect({ excludeCause: true }) },
-  InvalidResponse: { message: Schema.String },
-})
+class InvalidRequest extends Schema.TaggedError<InvalidRequest>()("InvalidRequest", {
+  message: Schema.String,
+}) {}
+
+class NoRoute extends Schema.TaggedError<NoRoute>()("NoRoute", {
+  model: Schema.String,
+}) {}
+
+class NoAvailableDeployment extends Schema.TaggedError<NoAvailableDeployment>()("NoAvailableDeployment", {
+  model: Schema.String,
+}) {}
+
+class UnsupportedCapability extends Schema.TaggedError<UnsupportedCapability>()("UnsupportedCapability", {
+  model: Schema.String,
+  capability: Schema.String,
+}) {}
+
+class RoutingFailed extends Schema.TaggedError<RoutingFailed>()("RoutingFailed", {
+  cause: RoutingError,
+}) {}
+
+class ProviderFailed extends Schema.TaggedError<ProviderFailed>()("ProviderFailed", {
+  deployment: Schema.String,
+  cause: ProviderError,
+}) {}
+
+class MiddlewareFailed extends Schema.TaggedError<MiddlewareFailed>()("MiddlewareFailed", {
+  id: Schema.String,
+  cause: Schema.Defect({ excludeCause: true }),
+}) {}
+
+class InvalidResponse extends Schema.TaggedError<InvalidResponse>()("InvalidResponse", {
+  message: Schema.String,
+}) {}
+
+export const RouterError = Schema.Union([InvalidRequest, NoRoute, NoAvailableDeployment, UnsupportedCapability, RoutingFailed, ProviderFailed, MiddlewareFailed, InvalidResponse]).pipe(Schema.toTaggedUnion("_tag"))
 
 export type RouterError = typeof RouterError.Type
 
 export interface Router<Api extends HttpApi.Constraint = HttpApi.Constraint> {
-  /** Establish the selected upstream before committing an HTTP streaming response. */
-  readonly open: (request: ModelRequest, options?: InvocationOptions) => Effect.Effect<Stream.Stream<ModelEvent, RouterError>, RouterError>
-  /** Fallback is possible only before the first event has been emitted. */
-  readonly stream: (request: ModelRequest, options?: InvocationOptions) => Stream.Stream<ModelEvent, RouterError>
-  /** Returns the terminal OpenResponses response snapshot from the same execution path. */
-  readonly complete: (request: ModelRequest, options?: InvocationOptions) => Effect.Effect<ModelResponse, RouterError>
+  /** Route a complete invocation; direct protocol pipelines and projections share this path. */
+  readonly invoke: (command: Command, options?: InvocationOptions) => Effect.Effect<ExecutionValue, RouterError>
   /** The composed HTTP surface and routes; hosts may serve them or make a fetch handler. */
   readonly http: {
     readonly api: Api
     readonly routes: Layer.Layer<never, never, HttpHostServices>
   }
 }
+
+/** Layer-provided router service for long-lived hosts and plugin handlers. */
+export class RouterRuntime extends Context.Service<RouterRuntime, Router>()("RouterRuntime") {}
 
 export interface RouterOptions<Plugins extends readonly RouterPlugin<string, unknown>[]> {
   readonly routes: readonly ModelRoute[]
@@ -48,134 +79,18 @@ type HttpGroups<Plugin> = Plugin extends { readonly http: { readonly api: HttpAp
 
 export type ComposedHttpApi<Plugins extends readonly RouterPlugin<string, unknown>[]> = HttpApi.HttpApi<"better-router", HttpGroups<Plugins[number]>>
 
-interface Registry {
-  readonly deployments: HashMap.HashMap<DeploymentId, ModelDeployment<unknown>>
-  readonly policies: HashMap.HashMap<string, NonNullable<RouterPlugin["policies"]>[number]>
-  readonly transforms: readonly ModelTransform<unknown>[]
-  readonly routes: HashMap.HashMap<ModelName, ModelRoute>
-  readonly ids: HashSet.HashSet<string>
-  readonly groupIds: HashSet.HashSet<string>
-  readonly httpPaths: HashSet.HashSet<string>
-  readonly api: HttpApi.Top
-}
-
-const emptyRegistry = (): Registry => ({
-  deployments: HashMap.empty(),
-  policies: HashMap.empty(),
-  transforms: [],
-  routes: HashMap.empty(),
-  ids: HashSet.empty(),
-  groupIds: HashSet.empty(),
-  httpPaths: HashSet.empty(),
-  api: HttpApi.make("better-router") as unknown as HttpApi.Top,
-})
-
-const duplicate = (kind: "plugin" | "deployment" | "policy" | "transform" | "http_group", id: string) => SetupError.cases.DuplicateId.make({ kind, id })
-
-function registerPlugin(state: Registry, plugin: RouterPlugin<string, unknown>): Result.Result<Registry, SetupError> {
-  return Result.gen(function* () {
-    if (HashSet.has(state.ids, plugin.id)) return yield* Result.fail(duplicate("plugin", plugin.id))
-    const deployments = yield* (plugin.deployments ?? []).reduce<Result.Result<Registry["deployments"], SetupError>>(
-      (current, deployment) =>
-        Result.gen(function* () {
-          const entries = yield* current
-          if (HashMap.has(entries, deployment.id)) return yield* Result.fail(duplicate("deployment", deployment.id))
-          if (!deployment.execute.http && !deployment.execute.websocket) {
-            return yield* Result.fail(
-              SetupError.cases.InvalidRoute.make({
-                model: deployment.id,
-                message: "Deployment has no executor",
-              }),
-            )
-          }
-          return HashMap.set(entries, deployment.id, deployment)
-        }),
-      Result.succeed(state.deployments),
-    )
-    const policies = yield* (plugin.policies ?? []).reduce<Result.Result<Registry["policies"], SetupError>>(
-      (current, policy) =>
-        Result.gen(function* () {
-          const entries = yield* current
-          if (HashMap.has(entries, policy.id)) return yield* Result.fail(duplicate("policy", policy.id))
-          return HashMap.set(entries, policy.id, policy)
-        }),
-      Result.succeed(state.policies),
-    )
-    const transforms = yield* (plugin.transforms ?? []).reduce<Result.Result<Registry["transforms"], SetupError>>(
-      (current, transform) =>
-        Result.gen(function* () {
-          const entries = yield* current
-          if (entries.some((entry) => entry.id === transform.id)) {
-            return yield* Result.fail(duplicate("transform", transform.id))
-          }
-          return [...entries, transform]
-        }),
-      Result.succeed(state.transforms),
-    )
-    const fragment = plugin.http?.api as HttpApi.Top | undefined
-    const http = yield* Object.values(fragment?.groups ?? {}).reduce<Result.Result<Pick<Registry, "groupIds" | "httpPaths">, SetupError>>(
-      (current, group) =>
-        Result.gen(function* () {
-          const entries = yield* current
-          if (HashSet.has(entries.groupIds, group.identifier)) {
-            return yield* Result.fail(duplicate("http_group", group.identifier))
-          }
-          const paths = yield* Object.values(group.endpoints).reduce<Result.Result<Registry["httpPaths"], SetupError>>(
-            (currentPaths, endpoint) =>
-              Result.gen(function* () {
-                const seen = yield* currentPaths
-                const key = `${endpoint.method} ${endpoint.path}`
-                if (HashSet.has(seen, key)) {
-                  return yield* Result.fail(
-                    SetupError.cases.DuplicateHttpRoute.make({
-                      method: endpoint.method,
-                      path: endpoint.path,
-                    }),
-                  )
-                }
-                return HashSet.add(seen, key)
-              }),
-            Result.succeed(entries.httpPaths),
-          )
-          return { groupIds: HashSet.add(entries.groupIds, group.identifier), httpPaths: paths }
-        }),
-      Result.succeed({ groupIds: state.groupIds, httpPaths: state.httpPaths }),
-    )
-    return {
-      ...state,
-      deployments,
-      policies,
-      transforms,
-      ...http,
-      ids: HashSet.add(state.ids, plugin.id),
-      api: fragment ? state.api.addHttpApi(fragment) : state.api,
-    }
-  })
-}
-
-function registerRoute(state: Registry, route: ModelRoute): Result.Result<Registry, SetupError> {
-  if (HashMap.has(state.routes, route.model)) {
-    return Result.fail(SetupError.cases.InvalidRoute.make({ model: route.model, message: "Duplicate model route" }))
-  }
-  if (route.deployments.length === 0 || HashSet.size(HashSet.fromIterable(route.deployments)) !== route.deployments.length || route.deployments.some((id) => !HashMap.has(state.deployments, id)) || (route.policy && !HashMap.has(state.policies, route.policy))) {
-    return Result.fail(
-      SetupError.cases.InvalidRoute.make({
-        model: route.model,
-        message: "Unknown or duplicate deployment or policy",
-      }),
-    )
-  }
-  return Result.succeed({ ...state, routes: HashMap.set(state.routes, route.model, route) })
-}
+type ExternalPluginRequirements<Plugins extends readonly RouterPlugin<string, unknown>[]> = Exclude<PluginRequirements<Plugins[number]>, Registry.Registry>
 
 /** Compose declarations once, then keep the scope open for SDK calls and HTTP serving. */
-export function make<const Plugins extends readonly RouterPlugin<string, unknown>[]>(options: RouterOptions<Plugins>): Effect.Effect<Router<ComposedHttpApi<Plugins>>, SetupError, Scope.Scope | PluginRequirements<Plugins[number]>> {
+export function make<const Plugins extends readonly RouterPlugin<string, unknown>[]>(options: RouterOptions<Plugins>): Effect.Effect<Router<ComposedHttpApi<Plugins>>, SetupError, Scope.Scope | ExternalPluginRequirements<Plugins>> {
   const program = Effect.gen(function* () {
-    const environment = yield* Effect.context<Scope.Scope | PluginRequirements<Plugins[number]>>()
-    const plugins = options.plugins.reduce<Result.Result<Registry, SetupError>>((current, plugin) => Result.flatMap(current, (state) => registerPlugin(state, plugin)), Result.succeed(emptyRegistry()))
-    const registry = yield* Effect.fromResult(options.routes.reduce<Result.Result<Registry, SetupError>>((current, route) => Result.flatMap(current, (state) => registerRoute(state, route)), plugins))
+    const environment = yield* Effect.context<Scope.Scope | ExternalPluginRequirements<Plugins>>()
+    const plugins = options.plugins.reduce<Result.Result<Registry.Snapshot, SetupError>>((current, plugin) => Result.flatMap(current, (state) => Registry.registerPlugin(state, plugin)), Result.succeed(Registry.empty()))
+    const registry = yield* Effect.fromResult(options.routes.reduce<Result.Result<Registry.Snapshot, SetupError>>((current, route) => Result.flatMap(current, (state) => Registry.addRoute(state, route)), plugins))
+    yield* Effect.fromResult(Registry.validatePipelines(registry))
+    const runtimeEnvironment = Context.add(environment, Registry.Registry, registry)
 
-    const select: ModelHandler<unknown> = (request, invocation) =>
+    const select = (request: GenerationRequest, invocation?: InvocationOptions): Effect.Effect<Stream.Stream<GenerationEvent, RouterError>, RouterError, unknown> =>
       Effect.gen(function* () {
         const route = yield* Option.match(HashMap.get(registry.routes, request.model), {
           onNone: () => Effect.fail(RouterError.cases.NoRoute.make({ model: request.model })),
@@ -206,13 +121,13 @@ export function make<const Plugins extends readonly RouterPlugin<string, unknown
         if (HashSet.size(HashSet.fromIterable(ranked.map((entry) => entry.id))) !== ranked.length || ranked.some((entry) => !HashSet.has(eligibleIds, entry.id))) {
           return yield* Effect.fail(
             RouterError.cases.RoutingFailed.make({
-              cause: { message: "Policy returned an unknown or duplicate deployment" },
+              cause: RoutingError.make({ message: "Policy returned an unknown or duplicate deployment" }),
             }),
           )
         }
         if (ranked.length === 0) return yield* Effect.fail(RouterError.cases.NoAvailableDeployment.make({ model: request.model }))
 
-        const attempt = (index: number): Effect.Effect<Stream.Stream<ModelEvent, RouterError>, RouterError, unknown> =>
+        const attempt = (index: number): Effect.Effect<Stream.Stream<GenerationEvent, RouterError>, RouterError, unknown> =>
           Effect.gen(function* () {
             const selected = yield* Option.match(HashMap.get(registry.deployments, ranked[index].id), {
               onNone: () => Effect.fail(RouterError.cases.NoAvailableDeployment.make({ model: request.model })),
@@ -228,7 +143,7 @@ export function make<const Plugins extends readonly RouterPlugin<string, unknown
               Effect.map(
                 (events) =>
                   Stream.unwrap(
-                    Stream.peel(Stream.rechunk(Stream.provideContext(events, environment), 1), Sink.head<ModelEvent>()).pipe(
+                    Stream.peel(Stream.rechunk(Stream.provideContext(events, runtimeEnvironment), 1), Sink.head<GenerationEvent>()).pipe(
                       Effect.map(([first, rest]) =>
                         Option.match(first, {
                           onNone: () => Stream.empty,
@@ -237,7 +152,7 @@ export function make<const Plugins extends readonly RouterPlugin<string, unknown
                       ),
                       Effect.catch(next),
                     ),
-                  ) as Stream.Stream<ModelEvent, RouterError>,
+                  ) as Stream.Stream<GenerationEvent, RouterError>,
               ),
               Effect.catch(next),
             )
@@ -245,36 +160,86 @@ export function make<const Plugins extends readonly RouterPlugin<string, unknown
         return yield* attempt(0)
       })
 
-    const handler = registry.transforms.reduceRight<ModelHandler<unknown>>((next, transform) => transform.wrap(next), select)
-
-    const open: Router["open"] = (request, invocation) =>
-      Schema.decodeUnknownEffect(Request)(request).pipe(
-        Effect.mapError((error) => RouterError.cases.InvalidRequest.make({ message: error.message })),
-        Effect.flatMap((parsed) => (parsed.model ? handler({ ...parsed, model: parsed.model }, invocation) : Effect.fail(RouterError.cases.InvalidRequest.make({ message: "A model alias is required" })))),
-        Effect.provideContext(environment),
-      ) as Effect.Effect<Stream.Stream<ModelEvent, RouterError>, RouterError>
-    const stream: Router["stream"] = (request, invocation) => Stream.unwrap(open(request, invocation))
-    const complete: Router["complete"] = (request, invocation) =>
+    const selectNative = (request: ProtocolRequest): Effect.Effect<Option.Option<ExecutionValue>, RouterError, unknown> =>
       Effect.gen(function* () {
-        const terminal = yield* Stream.runFoldEffect(
-          stream(request, invocation),
-          () => Option.none<ModelResponse>(),
-          (previous, event) => (Option.isSome(previous) ? Effect.fail(RouterError.cases.InvalidResponse.make({ message: "Events followed the terminal response" })) : Effect.succeed(event.type === "response.completed" || event.type === "response.incomplete" || event.type === "response.failed" ? Option.some(event.response) : previous)),
-        )
-        return yield* Option.match(terminal, {
-          onNone: () => Effect.fail(RouterError.cases.InvalidResponse.make({ message: "Missing terminal response" })),
+        const route = yield* Option.match(HashMap.get(registry.routes, request.model), {
+          onNone: () => Effect.fail(RouterError.cases.NoRoute.make({ model: request.model })),
           onSome: Effect.succeed,
         })
+        const configured = yield* Effect.forEach(route.deployments, (id) =>
+          Option.match(HashMap.get(registry.deployments, id), {
+            onNone: () => Effect.fail(RouterError.cases.NoAvailableDeployment.make({ model: request.model })),
+            onSome: Effect.succeed,
+          }),
+        )
+        const eligible = configured.filter((deployment) => registry.pipelines.some((pipeline) => pipeline.deployment === deployment.id && pipeline.source === request.protocol && pipeline.target === deployment.protocol))
+        if (eligible.length === 0) return Option.none<ExecutionValue>()
+        const policy = route.policy ? HashMap.get(registry.policies, route.policy) : Option.none()
+        const ranked = Option.isSome(policy) ? yield* policy.value.rank({ model: request.model }, eligible).pipe(Effect.mapError((cause) => RouterError.cases.RoutingFailed.make({ cause }))) : eligible
+        const eligibleIds = HashSet.fromIterable(eligible.map((deployment) => deployment.id))
+        if (HashSet.size(HashSet.fromIterable(ranked.map((entry) => entry.id))) !== ranked.length || ranked.some((entry) => !HashSet.has(eligibleIds, entry.id))) {
+          return yield* Effect.fail(
+            RouterError.cases.RoutingFailed.make({
+              cause: RoutingError.make({ message: "Policy returned an unknown or duplicate deployment" }),
+            }),
+          )
+        }
+        if (ranked.length === 0) return Option.none<ExecutionValue>()
+        const attempt = (index: number): Effect.Effect<Option.Option<ExecutionValue>, RouterError, unknown> =>
+          Effect.gen(function* () {
+            const selected = yield* Option.match(HashMap.get(registry.deployments, ranked[index].id), {
+              onNone: () => Effect.fail(RouterError.cases.NoAvailableDeployment.make({ model: request.model })),
+              onSome: Effect.succeed,
+            })
+            const pipeline = registry.pipelines.find((entry) => entry.deployment === selected.id && entry.source === request.protocol && entry.target === selected.protocol)
+            if (!pipeline) return Option.none<ExecutionValue>()
+            const failure = (cause: ProviderError): RouterError => RouterError.cases.ProviderFailed.make({ deployment: selected.id, cause })
+            const next = (cause: ProviderError) => (cause.retryable && index + 1 < ranked.length ? attempt(index + 1) : Effect.fail(failure(cause)))
+            return yield* pipeline.execute({ ...request, targetModel: selected.model }).pipe(
+              Effect.flatMap((response) => Execution.opaque(response).pipe(Effect.map(Option.some))),
+              Effect.catch(next),
+            )
+          })
+        return yield* attempt(0)
       })
 
+    const open = (request: GenerationRequest, invocation?: InvocationOptions) =>
+      Schema.decodeUnknownEffect(Request)(request, { onExcessProperty: "error" }).pipe(
+        Effect.mapError((error) => RouterError.cases.InvalidRequest.make({ message: error.message })),
+        Effect.flatMap((parsed) => (parsed.model ? select({ ...parsed, model: parsed.model }, invocation) : Effect.fail(RouterError.cases.InvalidRequest.make({ message: "A model alias is required" })))),
+      )
+
+    const asGeneration = (events: Stream.Stream<GenerationEvent, RouterError, unknown>): Effect.Effect<ExecutionValue> => Execution.generation(Stream.provideContext(events, runtimeEnvironment) as Stream.Stream<GenerationEvent, RouterError>)
+    const route: Handler<unknown> = (command, invocation) =>
+      command.type === "generation"
+        ? open(command.request, invocation).pipe(Effect.flatMap(asGeneration))
+        : Schema.decodeUnknownEffect(ProtocolRequest)(command.request).pipe(
+            Effect.mapError((error) => RouterError.cases.InvalidRequest.make({ message: error.message })),
+            Effect.flatMap((request) =>
+              selectNative(request).pipe(
+                Effect.flatMap(
+                  Option.match({
+                    onNone: () =>
+                      Effect.fromResult(toGeneration(command, registry.projections)).pipe(
+                        Effect.mapError((error) => (error.reason === "unsupported" ? RouterError.cases.UnsupportedCapability.make({ model: request.model, capability: request.protocol }) : RouterError.cases.InvalidRequest.make({ message: error.message }))),
+                        Effect.flatMap((projected) => open(projected, invocation)),
+                        Effect.flatMap(asGeneration),
+                      ),
+                    onSome: Effect.succeed,
+                  }),
+                ),
+              ),
+            ),
+          )
+    const handler = registry.middleware.reduceRight<Handler<unknown>>((next, middleware) => middleware.wrap(next), route)
+    const invoke: Router["invoke"] = (command, invocation) => Effect.provideContext(handler(command, invocation), runtimeEnvironment) as Effect.Effect<ExecutionValue, RouterError>
+
     const router: Router<ComposedHttpApi<Plugins>> = {
-      open,
-      stream,
-      complete,
+      invoke,
       http: {
         api: registry.api as unknown as ComposedHttpApi<Plugins>,
         get routes() {
-          const contextLayer = Layer.succeedContext(environment)
+          const contextLayer = Layer.succeedContext(runtimeEnvironment)
           return options.plugins.reduce<Layer.Layer<never, never, HttpHostServices>>((current, plugin) => (plugin.http ? (Layer.merge(current, Layer.provide(plugin.http.routes(router), contextLayer)) as Layer.Layer<never, never, HttpHostServices>) : current), Layer.empty)
         },
       },
@@ -282,7 +247,7 @@ export function make<const Plugins extends readonly RouterPlugin<string, unknown
     yield* Effect.forEach(options.plugins, (plugin) =>
       plugin.start
         ? plugin.start(router).pipe(
-            Effect.provideContext(environment),
+            Effect.provideContext(runtimeEnvironment),
             Effect.mapError((cause) => SetupError.cases.PluginStartFailed.make({ plugin: plugin.id, cause })),
           )
         : Effect.void,
@@ -290,5 +255,7 @@ export function make<const Plugins extends readonly RouterPlugin<string, unknown
     return router
   })
   // Plugin declarations are erased in the registry; their requirements were captured above.
-  return program as Effect.Effect<Router<ComposedHttpApi<Plugins>>, SetupError, Scope.Scope | PluginRequirements<Plugins[number]>>
+  return program as Effect.Effect<Router<ComposedHttpApi<Plugins>>, SetupError, Scope.Scope | ExternalPluginRequirements<Plugins>>
 }
+
+export const layer = <const Plugins extends readonly RouterPlugin<string, unknown>[]>(options: RouterOptions<Plugins>): Layer.Layer<RouterRuntime, SetupError, Scope.Scope | ExternalPluginRequirements<Plugins>> => Layer.effect(RouterRuntime, make(options))

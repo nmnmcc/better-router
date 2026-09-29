@@ -20,5 +20,15 @@ export interface AnthropicMessagesPluginOptions {
 export function make(options: AnthropicMessagesPluginOptions & { gatewayKey: Redacted.Redacted<string> }): AnthropicMessagesPlugin<HttpClient.HttpClient, typeof AnthropicMessagesHttp.api> & { readonly http: ReturnType<typeof AnthropicMessagesHttp.make> }
 export function make(options: AnthropicMessagesPluginOptions): AnthropicMessagesPlugin<HttpClient.HttpClient, typeof AnthropicMessagesHttp.api>
 export function make(options: AnthropicMessagesPluginOptions): AnthropicMessagesPlugin<HttpClient.HttpClient, typeof AnthropicMessagesHttp.api> {
-  return { id: "anthropic-messages", ...(options.deployments ? { deployments: options.deployments } : {}), ...(options.gatewayKey ? { http: AnthropicMessagesHttp.make({ gatewayKey: options.gatewayKey }) } : {}) }
+  return {
+    id: "anthropic-messages",
+    projections: [AnthropicMessagesHttp.projection],
+    ...(options.deployments
+      ? {
+          deployments: options.deployments,
+          pipelines: options.deployments.flatMap((deployment) => (deployment.execute.direct ? [{ id: `${deployment.id}:direct`, deployment: deployment.id, source: deployment.protocol, target: deployment.protocol, execute: deployment.execute.direct }] : [])),
+        }
+      : {}),
+    ...(options.gatewayKey ? { http: AnthropicMessagesHttp.make({ gatewayKey: options.gatewayKey }) } : {}),
+  }
 }

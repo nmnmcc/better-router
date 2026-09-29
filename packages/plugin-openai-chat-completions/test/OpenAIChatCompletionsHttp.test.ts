@@ -2,13 +2,13 @@ import assert from "node:assert/strict"
 import { it } from "vitest"
 import { Result, Schema } from "effect"
 import { OpenApi } from "effect/unstable/httpapi"
-import type { ModelResponse } from "@better-router/core/Model"
-import type { OutputItem } from "@better-router/core/Model"
-import { snapshot } from "@better-router/core/ModelEvents"
+import type { GenerationResponse } from "@better-router/core/Generation"
+import type { GenerationOutputItem } from "@better-router/core/Generation"
+import { snapshot } from "@better-router/core/GenerationEvents"
 import { OpenAIChatCompletionsHttpError, api, toChatCompletion, OpenAIChatCompletionsUpstreamResponseError } from "@better-router/plugin-openai-chat-completions/OpenAIChatCompletionsHttp"
 
 const textItem = { type: "message", role: "assistant", id: "msg_1", status: "completed", content: [{ type: "output_text", text: "Hello", annotations: [] }] } as const
-const response = (output: readonly OutputItem[] = [textItem], extras: Partial<ModelResponse> = {}): ModelResponse => ({
+const response = (output: readonly GenerationOutputItem[] = [textItem], extras: Partial<GenerationResponse> = {}): GenerationResponse => ({
   ...snapshot(
     { model: "gpt-test" },
     "resp_1",
@@ -40,7 +40,8 @@ it("HTTP API declares the schema-backed error statuses", () => {
 })
 
 it("upstream projection errors encode with their Schema", () => {
-  const error = OpenAIChatCompletionsUpstreamResponseError.make({ _tag: "OpenAIChatCompletionsUpstreamResponseError", message: "Invalid response" })
+  const error = OpenAIChatCompletionsUpstreamResponseError.make({ message: "Invalid response" })
+  assert.equal(error instanceof Error, true)
   const encoded = Schema.encodeSync(OpenAIChatCompletionsUpstreamResponseError)(error)
   assert.deepEqual(encoded, {
     _tag: "OpenAIChatCompletionsUpstreamResponseError",

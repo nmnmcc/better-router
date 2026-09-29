@@ -1,6 +1,6 @@
 # Protocol matrix
 
-Each `source-to-target` directory is an independent Yarn workspace with a `start` entrypoint and an HTTP integration test. `source` selects the only exposed endpoint; `target` selects the only deployment. All nine combinations route through OpenResponses IR, including same-protocol combinations. `shared` contains configuration and a local fake-upstream fixture, not another gateway.
+Each `source-to-target` directory is an independent Yarn workspace with a `start` entrypoint and an HTTP integration test. `source` selects the only exposed endpoint; `target` selects the only deployment. Cross-protocol combinations route through the core generation ABI; same-protocol combinations may use the declared opaque direct projection. `shared` contains configuration and a local fake-upstream fixture, not another gateway.
 
 | Ingress   | Chat upstream       | Responses upstream       | Anthropic upstream       |
 | --------- | ------------------- | ------------------------ | ------------------------ |

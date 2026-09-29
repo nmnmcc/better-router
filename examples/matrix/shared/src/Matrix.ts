@@ -39,7 +39,9 @@ const HostConfig = Schema.Struct({
   host: Schema.NonEmptyString,
   port: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })),
 })
-const HostConfigError = Schema.Struct({ message: Schema.String })
+class HostConfigError extends Schema.TaggedError<HostConfigError>()("HostConfigError", {
+  message: Schema.String,
+}) {}
 
 /** Each executable entrypoint declares exactly one ingress and one deployment. */
 export function start(ingress: Protocol, upstream: Protocol): void {

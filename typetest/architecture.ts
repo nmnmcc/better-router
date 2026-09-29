@@ -2,9 +2,9 @@ import { Effect, Layer, Redacted, Result, Schema, Stream } from "effect"
 import type { Scope } from "effect"
 import type { HttpClient } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
-import { Plugin, Router } from "@better-router/core"
+import { Plugin, Registry, Router } from "@better-router/core"
 import type { Deployment } from "@better-router/core"
-import type { ModelRequest } from "@better-router/core/Model"
+import type { GenerationRequest } from "@better-router/core/Generation"
 import type { AnthropicMessages, AnthropicMessagesPlugin } from "@better-router/plugin-anthropic-messages"
 import { OpenAIChatCompletions, OpenAIChatCompletionsPlugin } from "@better-router/plugin-openai-chat-completions"
 import { OpenAIResponses, OpenAIResponsesPlugin } from "@better-router/plugin-openai-responses"
@@ -80,9 +80,9 @@ const openaiHttpOnly: OpenAIResponsesDeployment = {
 }
 void openaiHttpOnly
 
-const request: ModelRequest = { model: "chat", input: [] }
+const request: GenerationRequest = { model: "chat", input: [] }
 void request
-const opened = Effect.flatMap(router, (value) => value.open(request))
+const opened = Effect.flatMap(router, (value) => value.invoke({ type: "generation", request }))
 void opened
 
 const noRoute: Router.RouterError = Router.RouterError.cases.NoRoute.make({ model: "chat" })
@@ -118,7 +118,7 @@ const invalidConversion: OpenAIChatCompletions.OpenAIChatCompletionsConversionEr
 void invalidConversion
 
 // @ts-expect-error A deployment must establish the connection in an Effect before returning its event Stream.
-const wrongExecutor: Deployment.ModelExecutor = () => Stream.empty
+const wrongExecutor: Deployment.GenerationExecutor = () => Stream.empty
 void wrongExecutor
 
 const chat = OpenAIChatCompletionsPlugin.make({ gatewayKey: Redacted.make("client") })
@@ -142,7 +142,7 @@ const chatOnlyRequirement: Equal<EnvironmentOf<typeof chatOnlyRouter>, Scope.Sco
 void chatOnlyRequirement
 
 // @ts-expect-error The old messages field is not in the OpenResponses request body.
-const legacyRequest: ModelRequest = { model: "chat", messages: [] }
+const legacyRequest: GenerationRequest = { model: "chat", messages: [] }
 void legacyRequest
 
 const invalidHttpPlugin: Plugin.RouterPlugin<"incomplete"> = {
@@ -165,7 +165,7 @@ const invalidAnthropic: AnthropicMessages.AnthropicMessagesDeployment = {
 }
 void invalidAnthropic
 
-const invalidDeployment: Deployment.ModelDeployment = {
+const invalidDeployment: Deployment.Deployment = {
   id: "no-transport",
   provider: "openai",
   model: "gpt-5",
@@ -190,3 +190,8 @@ const pluginRequirement: Equal<Plugin.PluginRequirements<typeof audit>, AuditLog
 const routerRequirement: Equal<EnvironmentOf<typeof withRequirements>, Scope.Scope | AuditLog> = true
 void pluginRequirement
 void routerRequirement
+
+const registryInspector: Plugin.RouterPlugin<"registry-inspector", Registry.Registry> = { id: "registry-inspector" }
+const registryRouter = Router.make({ plugins: [registryInspector], routes: [] })
+const registryRouterRequirement: Equal<EnvironmentOf<typeof registryRouter>, Scope.Scope> = true
+void registryRouterRequirement

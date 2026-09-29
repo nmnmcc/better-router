@@ -20,7 +20,13 @@ export function make(options: OpenAIChatCompletionsPluginOptions): OpenAIChatCom
 export function make(options: OpenAIChatCompletionsPluginOptions): OpenAIChatCompletionsPlugin {
   return {
     id: "openai-chat-completions",
+    projections: [OpenAIChatCompletionsHttp.projection],
     ...(options.gatewayKey ? { http: OpenAIChatCompletionsHttp.make({ gatewayKey: options.gatewayKey }) } : {}),
-    ...(options.deployments ? { deployments: options.deployments } : {}),
+    ...(options.deployments
+      ? {
+          deployments: options.deployments,
+          pipelines: options.deployments.flatMap((deployment) => (deployment.execute.direct ? [{ id: `${deployment.id}:direct`, deployment: deployment.id, source: deployment.protocol, target: deployment.protocol, execute: deployment.execute.direct }] : [])),
+        }
+      : {}),
   }
 }

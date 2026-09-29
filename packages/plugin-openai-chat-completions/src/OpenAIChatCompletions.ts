@@ -1,6 +1,6 @@
 import { Result, Schema } from "effect"
 import { ConversionError, at, fromSchema, requireThat } from "@better-router/core/Conversion"
-import type { InputItem, ModelRequest } from "@better-router/core/Model"
+import type { GenerationInputItem, GenerationRequest } from "@better-router/core/Generation"
 
 export { make, toChatRequest } from "./OpenAIChatCompletionsUpstream.js"
 export type { OpenAIChatCompletionsDeployment, OpenAIChatCompletionsDeploymentConfig } from "./OpenAIChatCompletionsUpstream.js"
@@ -121,7 +121,7 @@ type Part = typeof textPart.Type
 type Message = typeof message.Type
 
 export type OpenAIChatCompletionsRequest = {
-  readonly request: ModelRequest
+  readonly request: GenerationRequest
   readonly ingress: {
     readonly stream: boolean
     readonly hasStreamOptions: boolean
@@ -131,6 +131,9 @@ export type OpenAIChatCompletionsRequest = {
 
 export const decodeRequest = (value: unknown): Result.Result<Native, ConversionError> => Result.mapError(Schema.decodeUnknownResult(ChatRequest)(value), (error) => fromSchema(error, "request"))
 
+/** Decode only the model selector for a native pass-through attempt. */
+export const toNativeRequest = (value: unknown): Result.Result<{ readonly model: string; readonly stream?: boolean }, ConversionError> => Result.map(decodeRequest(value), ({ model, stream }) => ({ model, ...(stream === undefined ? {} : { stream }) }))
+
 const only = (value: object, path: string, keys: readonly string[]): Result.Result<void, ConversionError> => {
   const extra = Object.keys(value).find((key) => !keys.includes(key))
   return extra ? Result.fail(at(`${path}.${extra}`, "unsupported", "no OpenResponses mapping")) : Result.void
@@ -138,7 +141,7 @@ const only = (value: object, path: string, keys: readonly string[]): Result.Resu
 
 const imageUrl = (url: string | undefined, path: string): Result.Result<string, ConversionError> => (url === undefined ? Result.fail(at(path, "invalid", "expected an image URL")) : /^https?:\/\/\S+$/.test(url) || /^data:image\/(?:png|jpeg|gif|webp);base64,[a-zA-Z0-9+/=]+$/.test(url) ? Result.succeed(url) : Result.fail(at(path, "unsupported", "only URL and base64 image data are portable")))
 
-function parts(content: readonly Part[], path: string, role: Message["role"]): Result.Result<readonly (Extract<InputItem, { type: "message" }>["content"] extends readonly (infer P)[] ? P : never)[], ConversionError> {
+function parts(content: readonly Part[], path: string, role: Message["role"]): Result.Result<readonly (Extract<GenerationInputItem, { type: "message" }>["content"] extends readonly (infer P)[] ? P : never)[], ConversionError> {
   return content.reduce<Result.Result<readonly { readonly type: "input_text" | "output_text" | "input_image"; readonly text?: string; readonly image_url?: string; readonly detail?: "auto" | "low" | "high" }[], ConversionError>>(
     (previous, part, index) =>
       Result.gen(function* () {
@@ -159,28 +162,28 @@ function parts(content: readonly Part[], path: string, role: Message["role"]): R
         return yield* Result.fail(at(`${field}.type`, "unsupported", "no OpenResponses input content mapping"))
       }),
     Result.succeed([]),
-  ) as Result.Result<readonly (Extract<InputItem, { type: "message" }>["content"] extends readonly (infer P)[] ? P : never)[], ConversionError>
+  ) as Result.Result<readonly (Extract<GenerationInputItem, { type: "message" }>["content"] extends readonly (infer P)[] ? P : never)[], ConversionError>
 }
 
 const textParts = (content: string | null | readonly Part[] | undefined, path: string, role: Message["role"]) => (typeof content === "string" ? Result.succeed(content) : content === null || content === undefined ? Result.fail(at(path, "invalid", "content is required")) : parts(content, path, role))
 
-function convertMessage(source: Message, index: number): Result.Result<readonly InputItem[], ConversionError> {
+function convertMessage(source: Message, index: number): Result.Result<readonly GenerationInputItem[], ConversionError> {
   return Result.gen(function* () {
     const path = `messages[${index}]`
     if (source.role === "system" || source.role === "developer" || source.role === "user") {
       yield* only(source, path, ["role", "content"])
       const content = yield* textParts(source.content, `${path}.content`, source.role)
-      return [{ type: "message", role: source.role, content } as InputItem]
+      return [{ type: "message", role: source.role, content } as GenerationInputItem]
     }
     if (source.role === "tool") {
       yield* only(source, path, ["role", "tool_call_id", "content"])
       yield* requireThat(!!source.tool_call_id, `${path}.tool_call_id`, "invalid", "tool call ID is required")
       const content = yield* textParts(source.content, `${path}.content`, source.role)
-      return [{ type: "function_call_output", call_id: source.tool_call_id!, output: content } as InputItem]
+      return [{ type: "function_call_output", call_id: source.tool_call_id!, output: content } as GenerationInputItem]
     }
     if (source.role !== "assistant") return yield* Result.fail(at(`${path}.role`, "unsupported", "unknown chat message role"))
     yield* only(source, path, ["role", "content", "tool_calls"])
-    const calls = yield* (source.tool_calls ?? []).reduce<Result.Result<readonly InputItem[], ConversionError>>(
+    const calls = yield* (source.tool_calls ?? []).reduce<Result.Result<readonly GenerationInputItem[], ConversionError>>(
       (previous, entry, callIndex) =>
         Result.gen(function* () {
           const output = yield* previous
@@ -191,12 +194,12 @@ function convertMessage(source: Message, index: number): Result.Result<readonly 
           yield* requireThat(!!entry.id, `${field}.id`, "invalid", "tool call ID is required")
           yield* requireThat(!!entry.function.name, `${field}.function.name`, "invalid", "function name is required")
           yield* requireThat(entry.function.arguments !== undefined, `${field}.function.arguments`, "invalid", "arguments are required")
-          return [...output, { type: "function_call", call_id: entry.id, name: entry.function.name, arguments: entry.function.arguments! } as InputItem]
+          return [...output, { type: "function_call", call_id: entry.id, name: entry.function.name, arguments: entry.function.arguments! } as GenerationInputItem]
         }),
       Result.succeed([]),
     )
     if (source.content == null && calls.length === 0) return yield* Result.fail(at(path, "invalid", "assistant message needs content or function calls"))
-    const content = source.content == null ? [] : [{ type: "message", role: "assistant", content: yield* textParts(source.content, `${path}.content`, "assistant") } as InputItem]
+    const content = source.content == null ? [] : [{ type: "message", role: "assistant", content: yield* textParts(source.content, `${path}.content`, "assistant") } as GenerationInputItem]
     return [...content, ...calls]
   })
 }
@@ -211,7 +214,7 @@ export function parseRequest(value: unknown): Result.Result<OpenAIChatCompletion
         return yield* Result.fail(at("request.max_tokens", "invalid", "cannot combine max_tokens with max_completion_tokens"))
       }
       if (source.n !== undefined && source.n !== 1) return yield* Result.fail(at("request.n", "unsupported", "only one choice is portable"))
-      const input = yield* source.messages.reduce<Result.Result<readonly InputItem[], ConversionError>>(
+      const input = yield* source.messages.reduce<Result.Result<readonly GenerationInputItem[], ConversionError>>(
         (previous, item, index) =>
           Result.gen(function* () {
             const entries = yield* previous
@@ -219,7 +222,7 @@ export function parseRequest(value: unknown): Result.Result<OpenAIChatCompletion
           }),
         Result.succeed([]),
       )
-      const tools = yield* (source.tools ?? []).reduce<Result.Result<readonly NonNullable<ModelRequest["tools"]>[number][], ConversionError>>(
+      const tools = yield* (source.tools ?? []).reduce<Result.Result<readonly NonNullable<GenerationRequest["tools"]>[number][], ConversionError>>(
         (previous, entry, index) =>
           Result.gen(function* () {
             const output = yield* previous
@@ -271,7 +274,7 @@ export function parseRequest(value: unknown): Result.Result<OpenAIChatCompletion
       }
       const outOfRange = (["temperature", "top_p", "presence_penalty", "frequency_penalty"] as const).find((key) => source[key] !== undefined && (!Number.isFinite(source[key]) || source[key]! < (key.endsWith("penalty") ? -2 : 0) || source[key]! > (key === "top_p" ? 1 : 2)))
       if (outOfRange) return yield* Result.fail(at(`request.${outOfRange}`, "invalid", "number out of range"))
-      const request: ModelRequest = {
+      const request: GenerationRequest = {
         model: source.model,
         input,
         ...(source.tools === undefined ? {} : { tools }),
@@ -287,4 +290,4 @@ export function parseRequest(value: unknown): Result.Result<OpenAIChatCompletion
 }
 
 /** Parse and project Chat JSON for callers that do not need transport options. */
-export const toResponseRequest = (value: unknown): Result.Result<ModelRequest, ConversionError> => Result.map(parseRequest(value), ({ request }) => request)
+export const toResponseRequest = (value: unknown): Result.Result<GenerationRequest, ConversionError> => Result.map(parseRequest(value), ({ request }) => request)

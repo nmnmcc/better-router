@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import type { Effect, Stream } from "effect"
-import type { ModelEvent, ModelRequest } from "./Model.js"
+import type { GenerationEvent, GenerationRequest } from "./Generation.js"
 
 export type ProviderId = string
 export type DeploymentId = string
@@ -20,22 +20,20 @@ export interface DeploymentRef {
   readonly model: string
 }
 
-export const ProviderError = Schema.Struct({
+export class ProviderError extends Schema.TaggedError<ProviderError>()("ProviderError", {
   kind: Schema.Literals(["invalid_request", "unauthorized", "rate_limited", "timeout", "unavailable", "unsupported", "unknown"]),
   message: Schema.String,
   retryable: Schema.Boolean,
   cause: Schema.optional(Schema.Defect({ excludeCause: true })),
-})
+}) {}
 
-export type ProviderError = typeof ProviderError.Type
-
-export type ModelExecutor<Requirements = never> = (request: ModelRequest) => Effect.Effect<Stream.Stream<ModelEvent, ProviderError, Requirements>, ProviderError, Requirements>
+export type GenerationExecutor<Requirements = never> = (request: GenerationRequest) => Effect.Effect<Stream.Stream<GenerationEvent, ProviderError, Requirements>, ProviderError, Requirements>
 
 /** At least one executable upstream transport must be present. */
-export type UpstreamExecutors<Requirements = never> = { readonly http: ModelExecutor<Requirements>; readonly websocket?: ModelExecutor<Requirements> } | { readonly http?: ModelExecutor<Requirements>; readonly websocket: ModelExecutor<Requirements> }
+export type GenerationExecutors<Requirements = never> = { readonly http: GenerationExecutor<Requirements>; readonly websocket?: GenerationExecutor<Requirements> } | { readonly http?: GenerationExecutor<Requirements>; readonly websocket: GenerationExecutor<Requirements> }
 
 /** A deployment binds its private provider configuration to executable paths. */
-export interface ModelDeployment<Requirements = never> extends DeploymentRef {
+export interface Deployment<Requirements = never> extends DeploymentRef {
   readonly protocol: string
-  readonly execute: UpstreamExecutors<Requirements>
+  readonly execute: GenerationExecutors<Requirements>
 }

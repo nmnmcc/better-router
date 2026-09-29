@@ -7,8 +7,8 @@ import { Effect, Schema } from "effect"
 
 const source = "https://www.openresponses.org/openapi/2026-04-24/openapi.json"
 const sha256 = "d598753c3a86fd8a2434828fe39dcc8786a7a694bbe46080a0d24c9fa40e72df"
-const output = "packages/core/src/generated/OpenResponses.ts"
-const schemaOutput = "packages/core/src/generated/OpenResponsesSchema.json"
+const output = "packages/plugin-openai-responses/src/generated/OpenResponses.ts"
+const schemaOutput = "packages/plugin-openai-responses/src/generated/OpenResponsesSchema.json"
 const parseJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))
 const documentFields = Schema.Struct({
   info: Schema.Struct({ version: Schema.String }),

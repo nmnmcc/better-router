@@ -1,12 +1,12 @@
 import { expect, it } from "tstyche"
 import { Redacted, Result } from "effect"
-import type { ModelRequest } from "@better-router/core/Model"
+import type { GenerationRequest } from "@better-router/core/Generation"
 import { make as deployment, toResponseRequest } from "@better-router/plugin-openai-chat-completions/OpenAIChatCompletions"
 import { make as plugin } from "@better-router/plugin-openai-chat-completions/OpenAIChatCompletionsPlugin"
 
 it("converts Chat requests into the canonical request contract", () => {
   const converted = toResponseRequest({ model: "chat", messages: [] })
-  if (Result.isSuccess(converted)) expect(converted.success).type.toBeAssignableTo<ModelRequest>()
+  if (Result.isSuccess(converted)) expect(converted.success).type.toBeAssignableTo<GenerationRequest>()
 })
 
 it("declares Chat ingress and deployments separately or together with redacted credentials", () => {

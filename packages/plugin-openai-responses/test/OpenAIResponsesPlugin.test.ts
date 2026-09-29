@@ -3,8 +3,8 @@ import { it as test } from "@effect/vitest"
 import { Effect, Layer, Redacted, Ref, Stream } from "effect"
 import { HttpClient, HttpRouter, HttpServer } from "effect/unstable/http"
 import { make as makeRouter } from "@better-router/core/Router"
-import type { ModelEvent } from "@better-router/core/Model"
-import { snapshot } from "@better-router/core/ModelEvents"
+import type { GenerationEvent } from "@better-router/core/Generation"
+import { snapshot } from "@better-router/core/GenerationEvents"
 import { OpenAIResponsesPlugin } from "@better-router/plugin-openai-responses"
 
 test.effect("Responses ingress serves JSON and SSE through a configured deployment", () =>
@@ -30,7 +30,7 @@ test.effect("Responses ingress serves JSON and SSE through a configured deployme
                     sequence_number: 3,
                     response: snapshot(request, "resp_1", 1234, request.model, [item], "completed", null, 1235),
                   },
-                ] as ModelEvent[])
+                ] as GenerationEvent[])
               }),
             ),
         },
@@ -84,7 +84,7 @@ test.effect("Responses ingress serves JSON and SSE through a configured deployme
 test.effect("invalid upstream resources return 502 rather than a client parse error", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      const local = { id: "broken", provider: "local", protocol: "local.responses", model: "private", execute: { http: () => Effect.succeed(Stream.succeed({ type: "response.completed", sequence_number: 0, response: { id: "incomplete" } } as ModelEvent)) } }
+      const local = { id: "broken", provider: "local", protocol: "local.responses", model: "private", execute: { http: () => Effect.succeed(Stream.succeed({ type: "response.completed", sequence_number: 0, response: { id: "incomplete" } } as GenerationEvent)) } }
       const routes = Layer.unwrap(
         makeRouter({
           plugins: [OpenAIResponsesPlugin.make({ gatewayKey: Redacted.make("client") }), { id: "local", deployments: [local] }],

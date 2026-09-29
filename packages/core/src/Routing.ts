@@ -1,24 +1,22 @@
 import { Schema } from "effect"
 import type { Effect } from "effect"
 import type { DeploymentId, DeploymentRef } from "./Deployment.js"
-import type { ModelName, ModelRequest } from "./Model.js"
+import type { GenerationRequest, ModelAlias } from "./Generation.js"
 
 export interface ModelRoute {
-  readonly model: ModelName
+  readonly model: ModelAlias
   /** Listed order is fallback order when no policy is selected. */
   readonly deployments: readonly DeploymentId[]
   readonly policy?: string
 }
 
-export const RoutingError = Schema.Struct({
+export class RoutingError extends Schema.TaggedError<RoutingError>()("RoutingError", {
   message: Schema.String,
   cause: Schema.optional(Schema.Defect({ excludeCause: true })),
-})
-
-export type RoutingError = typeof RoutingError.Type
+}) {}
 
 export interface RoutingPolicy {
   readonly id: string
   /** Return an ordered subset of candidates; do not introduce new deployments. */
-  readonly rank: (request: ModelRequest, candidates: readonly DeploymentRef[]) => Effect.Effect<readonly DeploymentRef[], RoutingError>
+  readonly rank: (request: GenerationRequest, candidates: readonly DeploymentRef[]) => Effect.Effect<readonly DeploymentRef[], RoutingError>
 }

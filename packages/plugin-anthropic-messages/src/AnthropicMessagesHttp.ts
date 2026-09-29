@@ -1,14 +1,17 @@
-import { Effect, HashMap, Layer, Redacted, Result, Schema, Stream } from "effect"
+import { Effect, HashMap, Layer, Option, Redacted, Result, Schema, Stream } from "effect"
 import { Sse } from "effect/unstable/encoding"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
 import { ConversionError, at, fromSchema } from "@better-router/core/Conversion"
 import type { HttpContribution } from "@better-router/core/Http"
 import { HttpJsonError, read as readJson } from "@better-router/core/HttpJson"
-import type { InputItem, ModelEvent, ModelRequest } from "@better-router/core/Model"
-import { Event, Request, Response } from "@better-router/core/ModelSchema"
+import type { GenerationInputItem, GenerationEvent, GenerationRequest } from "@better-router/core/Generation"
+import { Event, Request, Response } from "@better-router/core/GenerationSchema"
+import type { ProtocolDefinition } from "@better-router/core/Projection"
 import { RouterError } from "@better-router/core/Router"
 import type { Router } from "@better-router/core/Router"
+import { complete as completeGeneration } from "@better-router/core/Execution"
+import type { Execution } from "@better-router/core/Execution"
 
 export interface AnthropicMessagesHttpOptions {
   readonly gatewayKey: Redacted.Redacted<string>
@@ -30,6 +33,16 @@ export const api = HttpApi.make("anthropic-messages").add(
 
 export const AnthropicMessagesConversionError = ConversionError
 export type AnthropicMessagesConversionError = ConversionError
+
+export const projection: ProtocolDefinition<string, typeof AnthropicMessage.Type> = {
+  id: "anthropic.messages",
+  protocol: "anthropic.messages",
+  capability: "generation",
+  decode: toResponseRequest,
+  encodeEvent: () => Result.fail(at("event", "unsupported", "Anthropic Messages event encoding requires stream state")),
+  encodeResponse: (response) => toMessage(response, response.model),
+  encodeEvents: (events, context) => frames(events, context.model),
+}
 
 const rest = [Schema.Record(Schema.String, Schema.Unknown)] as const
 const fields = <S extends Schema.StructWithRest.Objects>(schema: S) => Schema.StructWithRest(schema, rest)
@@ -86,9 +99,11 @@ export const AnthropicRequest = fields(
     stream: Schema.optional(Schema.Boolean),
   }),
 )
+const NativeRequest = Schema.StructWithRest(Schema.Struct({ model: Schema.String, stream: Schema.optional(Schema.Boolean) }), rest)
+export const toNativeRequest = (value: unknown): Result.Result<{ readonly model: string; readonly stream?: boolean }, ConversionError> => Result.map(Schema.decodeUnknownResult(NativeRequest)(value), ({ model, stream }) => ({ model, ...(stream === undefined ? {} : { stream }) })).pipe(Result.mapError((error) => fromSchema(error, "request")))
 type Block = typeof content.Type
 type Message = typeof message.Type
-type Parts = Extract<InputItem, { type: "message" }>["content"]
+type Parts = Extract<GenerationInputItem, { type: "message" }>["content"]
 type InputPart = NonNullable<Exclude<Parts, string>>[number]
 
 const only = (value: object, path: string, allowed: readonly string[]): Result.Result<void, ConversionError> => {
@@ -120,12 +135,12 @@ function image(block: Block, path: string): Result.Result<InputPart, ConversionE
 }
 
 interface MessageState {
-  readonly items: readonly InputItem[]
+  readonly items: readonly GenerationInputItem[]
   readonly parts: readonly InputPart[]
 }
-const flush = (state: MessageState, role: "user" | "assistant"): MessageState => (state.parts.length ? { items: [...state.items, { type: "message", role, content: state.parts } as InputItem], parts: [] } : state)
+const flush = (state: MessageState, role: "user" | "assistant"): MessageState => (state.parts.length ? { items: [...state.items, { type: "message", role, content: state.parts } as GenerationInputItem], parts: [] } : state)
 
-function messageItems(value: Message, index: number): Result.Result<readonly InputItem[], ConversionError> {
+function messageItems(value: Message, index: number): Result.Result<readonly GenerationInputItem[], ConversionError> {
   return Result.gen(function* () {
     const path = `request.messages[${index}]`
     yield* only(value, path, ["role", "content"])
@@ -183,7 +198,7 @@ function messageItems(value: Message, index: number): Result.Result<readonly Inp
 }
 
 /** Parse Messages JSON once, then translate its supported semantics without modifying input. */
-export function toResponseRequest(value: unknown): Result.Result<ModelRequest, ConversionError> {
+export function toResponseRequest(value: unknown): Result.Result<GenerationRequest, ConversionError> {
   return Result.gen(function* () {
     const native = yield* Result.mapError(Schema.decodeUnknownResult(AnthropicRequest)(value), (error) => fromSchema(error, "request"))
     yield* only(native, "request", ["model", "messages", "max_tokens", "system", "tools", "tool_choice", "output_config", "temperature", "top_p", "stream"])
@@ -194,7 +209,7 @@ export function toResponseRequest(value: unknown): Result.Result<ModelRequest, C
     if (native.system !== undefined && typeof native.system !== "string") {
       return yield* Result.fail(at("request.system", "unsupported", "only text system prompts are portable"))
     }
-    const input = yield* native.messages.reduce<Result.Result<readonly InputItem[], ConversionError>>(
+    const input = yield* native.messages.reduce<Result.Result<readonly GenerationInputItem[], ConversionError>>(
       (previous, entry, index) =>
         Result.gen(function* () {
           const items = yield* previous
@@ -202,7 +217,7 @@ export function toResponseRequest(value: unknown): Result.Result<ModelRequest, C
         }),
       Result.succeed([]),
     )
-    const tools = yield* (native.tools ?? []).reduce<Result.Result<readonly NonNullable<ModelRequest["tools"]>[number][], ConversionError>>(
+    const tools = yield* (native.tools ?? []).reduce<Result.Result<readonly NonNullable<GenerationRequest["tools"]>[number][], ConversionError>>(
       (previous, entry, index) =>
         Result.gen(function* () {
           const items = yield* previous
@@ -232,7 +247,7 @@ export function toResponseRequest(value: unknown): Result.Result<ModelRequest, C
           if (entry.type !== "json_schema") return yield* Result.fail(at("request.output_config.format.type", "unsupported", "output format"))
           return { format: { type: "json_schema" as const, name: "anthropic_output", schema: yield* required(entry.schema, "request.output_config.format.schema"), strict: true } }
         })
-    const converted: ModelRequest = { model: native.model, input, max_output_tokens: native.max_tokens, ...(native.stream === undefined ? {} : { stream: native.stream }), ...(native.system === undefined ? {} : { instructions: native.system }), ...(native.tools === undefined ? {} : { tools }), ...(selected === undefined ? {} : { tool_choice: selected }), ...(native.tool_choice?.disable_parallel_tool_use === undefined ? {} : { parallel_tool_calls: !native.tool_choice.disable_parallel_tool_use }), ...(outputFormat === undefined ? {} : { text: outputFormat }), ...(native.temperature === undefined ? {} : { temperature: native.temperature }), ...(native.top_p === undefined ? {} : { top_p: native.top_p }) }
+    const converted: GenerationRequest = { model: native.model, input, max_output_tokens: native.max_tokens, ...(native.stream === undefined ? {} : { stream: native.stream }), ...(native.system === undefined ? {} : { instructions: native.system }), ...(native.tools === undefined ? {} : { tools }), ...(selected === undefined ? {} : { tool_choice: selected }), ...(native.tool_choice?.disable_parallel_tool_use === undefined ? {} : { parallel_tool_calls: !native.tool_choice.disable_parallel_tool_use }), ...(outputFormat === undefined ? {} : { text: outputFormat }), ...(native.temperature === undefined ? {} : { temperature: native.temperature }), ...(native.top_p === undefined ? {} : { top_p: native.top_p }) }
     return yield* Result.mapError(Schema.decodeUnknownResult(Request)(converted), (error) => fromSchema(error, "request"))
   })
 }
@@ -336,7 +351,7 @@ interface FrameState {
 }
 const initial = (): FrameState => ({ started: false, finished: false, opened: HashMap.empty(), nextIndex: 0 })
 
-function project(state: FrameState, value: ModelEvent | { readonly type: "end" }, model: string): Result.Result<readonly [FrameState, readonly string[]], ConversionError> {
+function project(state: FrameState, value: GenerationEvent | { readonly type: "end" }, model: string): Result.Result<readonly [FrameState, readonly string[]], ConversionError> {
   return Result.gen(function* () {
     if (value.type === "end") {
       if (!state.finished) return yield* Result.fail(at("event", "invalid", "missing terminal response"))
@@ -418,7 +433,7 @@ function project(state: FrameState, value: ModelEvent | { readonly type: "end" }
 
 const errorFrame = (message: string): string => Sse.encoder.write({ _tag: "Event", event: "error", id: undefined, data: JSON.stringify(AnthropicMessagesHttpError.make({ type: "error", error: { type: "api_error", message } })) })
 
-const frames = (source: Stream.Stream<ModelEvent, RouterError>, model: string): Stream.Stream<string> =>
+const frames = (source: Stream.Stream<GenerationEvent, unknown>, model: string): Stream.Stream<string> =>
   Stream.concat(source, Stream.succeed({ type: "end" as const })).pipe(
     Stream.mapAccumEffect(initial, (state, event) => Effect.fromResult(project(state, event, model))),
     Stream.catch((error) => Stream.succeed(errorFrame(Schema.is(ConversionError)(error) ? error.message : RouterError.guards.ProviderFailed(error) ? error.cause.message : "Upstream stream failed"))),
@@ -438,7 +453,7 @@ function onError(error: unknown): HttpServerResponse.HttpServerResponse {
       ProviderFailed: ({ cause }) => errorResponse(cause.kind === "rate_limited" ? 429 : cause.kind === "timeout" ? 504 : cause.kind === "unavailable" ? 503 : cause.kind === "invalid_request" ? 400 : cause.kind === "unsupported" ? 422 : 502, cause.message, "api_error"),
       InvalidResponse: () => errorResponse(502, "Model execution failed", "api_error"),
       RoutingFailed: () => errorResponse(502, "Model execution failed", "api_error"),
-      TransformFailed: () => errorResponse(502, "Model execution failed", "api_error"),
+      MiddlewareFailed: () => errorResponse(502, "Model execution failed", "api_error"),
     })
   return errorResponse(500, "Gateway failed", "api_error")
 }
@@ -449,15 +464,29 @@ const handle = (router: Router, request: HttpServerRequest.HttpServerRequest, ke
     if (!authorized) return errorResponse(401, "Invalid gateway key", "authentication_error")
     if (request.headers["anthropic-version"] !== "2023-06-01") return errorResponse(400, "Unsupported anthropic-version")
     const body = yield* readJson(request, true)
+    const nativeRequest = yield* Effect.fromResult(toNativeRequest(body))
+    const direct = nativeRequest.stream === true ? Option.some(yield* router.invoke({ type: "protocol", request: { protocol: "anthropic.messages", model: nativeRequest.model, body, headers: Object.fromEntries(Object.entries(request.headers)) } })) : Option.none<Execution>()
+    if (Option.isSome(direct) && direct.value.type === "opaque") {
+      const body = direct.value.response.body.pipe(Stream.catch((error) => Stream.succeed(new TextEncoder().encode(errorFrame(error instanceof Error ? error.message : "Upstream stream failed")))))
+      return HttpServerResponse.stream(body, {
+        status: direct.value.response.status,
+        headers: direct.value.response.headers,
+        contentType: direct.value.response.headers["content-type"],
+      })
+    }
     const converted = yield* Effect.fromResult(toResponseRequest(body))
     if (converted.stream) {
-      const events = yield* router.open(converted)
-      return HttpServerResponse.stream(frames(events, converted.model).pipe(Stream.encodeText), {
+      const execution = Option.isSome(direct) ? direct.value : yield* router.invoke({ type: "generation", request: converted })
+      if (execution.type !== "generation") return yield* Effect.fail(RouterError.cases.InvalidResponse.make({ message: "Expected generation events" }))
+      const events = execution.events
+      return HttpServerResponse.stream(projection.encodeEvents!(events, { model: converted.model }).pipe(Stream.encodeText), {
         headers: { "cache-control": "no-cache", "x-accel-buffering": "no" },
         contentType: "text/event-stream; charset=utf-8",
       })
     }
-    const result = yield* router.complete(converted)
+    const execution = yield* router.invoke({ type: "generation", request: converted })
+    if (execution.type !== "generation") return yield* Effect.fail(RouterError.cases.InvalidResponse.make({ message: "Expected generation events" }))
+    const result = yield* completeGeneration(execution.events)
     const message = yield* Effect.fromResult(toMessage(result, converted.model)).pipe(Effect.mapError((error) => RouterError.cases.InvalidResponse.make({ message: error.message })))
     return HttpServerResponse.jsonUnsafe(message)
   }).pipe(Effect.catch((error) => Effect.succeed(onError(error))))

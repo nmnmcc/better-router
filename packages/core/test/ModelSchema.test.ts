@@ -2,11 +2,11 @@ import assert from "node:assert/strict"
 import { it } from "@effect/vitest"
 import { Effect, Result, Schema, Stream } from "effect"
 import { fromSchema } from "@better-router/core/Conversion"
-import type { ModelRequest } from "@better-router/core/Model"
-import { fromNative, snapshot } from "@better-router/core/ModelEvents"
-import { Event, Request, Response, StandardEvent, StandardRequest, StandardResponse } from "@better-router/core/ModelSchema"
+import type { GenerationRequest } from "@better-router/core/Generation"
+import { fromNative, snapshot } from "@better-router/core/GenerationEvents"
+import { Event, Request, Response, StandardEvent, StandardRequest, StandardResponse } from "@better-router/core/GenerationSchema"
 
-const request: ModelRequest = { model: "public", input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Hi" }] }] }
+const request: GenerationRequest = { model: "public", input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Hi" }] }] }
 const resource = snapshot(request, "resp_1", 1234, "private", [], "completed", null, 1235)
 const created = { type: "response.created", sequence_number: 0, response: snapshot(request, "resp_1", 1234, "private", [], "in_progress", null, null) }
 
@@ -60,7 +60,7 @@ it("retains the nested field path of structural parse failures", () => {
 })
 
 it("projects JSON Schema request settings into the complete response wire shape", () => {
-  const configured: ModelRequest = {
+  const configured: GenerationRequest = {
     model: "private",
     text: {
       format: {

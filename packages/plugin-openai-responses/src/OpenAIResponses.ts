@@ -3,9 +3,10 @@ import type { Redacted } from "effect"
 import { Sse } from "effect/unstable/encoding"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ProviderError } from "@better-router/core/Deployment"
-import type { ModelDeployment, ModelExecutor } from "@better-router/core/Deployment"
-import type { ModelEvent } from "@better-router/core/Model"
-import { Event } from "@better-router/core/ModelSchema"
+import type { Deployment, GenerationExecutor } from "@better-router/core/Deployment"
+import type { ProtocolResponse, SelectedRequest } from "@better-router/core/Pipeline"
+import type { GenerationEvent } from "@better-router/core/Generation"
+import { Event } from "./OpenAIResponsesSchema.js"
 import { toResponseRequest } from "./OpenAIResponsesHttp.js"
 
 export interface OpenAIResponsesDeploymentConfig {
@@ -24,19 +25,18 @@ export const DeploymentConfig = Schema.Struct({
   organization: Schema.optional(Schema.String),
 })
 
-export const OpenAIResponsesInvalidDeploymentUrl = Schema.Struct({
-  _tag: Schema.Literal("OpenAIResponsesInvalidDeploymentUrl"),
+export class OpenAIResponsesInvalidDeploymentUrl extends Schema.TaggedError<OpenAIResponsesInvalidDeploymentUrl>()("OpenAIResponsesInvalidDeploymentUrl", {
   message: Schema.String,
-})
-export type OpenAIResponsesInvalidDeploymentUrl = typeof OpenAIResponsesInvalidDeploymentUrl.Type
+}) {}
 
 /** The WebSocket path is optional per deployment, not per provider or ingress. */
-export interface OpenAIResponsesDeployment<Requirements = never> extends ModelDeployment<Requirements> {
+export interface OpenAIResponsesDeployment<Requirements = never> extends Deployment<Requirements> {
   readonly provider: "openai"
   readonly protocol: "openai.responses"
   readonly execute: {
-    readonly http: ModelExecutor<Requirements>
-    readonly websocket?: ModelExecutor<Requirements>
+    readonly http: GenerationExecutor<Requirements>
+    readonly websocket?: GenerationExecutor<Requirements>
+    readonly direct?: (request: SelectedRequest) => Effect.Effect<ProtocolResponse, ProviderError, Requirements>
   }
 }
 
@@ -44,7 +44,7 @@ const json = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))
 const decodeEvent = Schema.decodeUnknownEffect(Event)
 const isProviderError = Schema.is(ProviderError)
 
-const failure = (kind: ProviderError["kind"], message: string, retryable = false, cause?: unknown): ProviderError => ({ kind, message, retryable, ...(cause === undefined ? {} : { cause }) })
+const failure = (kind: ProviderError["kind"], message: string, retryable = false, cause?: unknown): ProviderError => ProviderError.make({ kind, message, retryable, ...(cause === undefined ? {} : { cause }) })
 
 function statusError(status: number): ProviderError {
   if (status === 429) return failure("rate_limited", "Upstream rate limited the request", true)
@@ -54,7 +54,7 @@ function statusError(status: number): ProviderError {
   return failure("invalid_request", `Upstream rejected the request (${status})`)
 }
 
-function events(bytes: Stream.Stream<Uint8Array, unknown>): Stream.Stream<ModelEvent, ProviderError> {
+function events(bytes: Stream.Stream<Uint8Array, unknown>): Stream.Stream<GenerationEvent, ProviderError> {
   const frames = bytes.pipe(Stream.decodeText(), Stream.pipeThroughChannel(Sse.decode({ maxEventSize: 1024 * 1024 })))
   return Stream.concat(
     Stream.map(frames, (frame) => ({ kind: "frame" as const, frame })),
@@ -89,13 +89,54 @@ function events(bytes: Stream.Stream<Uint8Array, unknown>): Stream.Stream<ModelE
   )
 }
 
+interface NativeEventState {
+  readonly terminal: boolean
+  readonly done: boolean
+  readonly pending: readonly Uint8Array[]
+}
+
+type NativeEventEntry = { readonly kind: "frame"; readonly frame: Sse.Event } | { readonly kind: "end" }
+
+const nativeEvents = (bytes: Stream.Stream<Uint8Array, unknown>): Stream.Stream<Uint8Array, ProviderError> => {
+  const frames = bytes.pipe(Stream.decodeText(), Stream.pipeThroughChannel(Sse.decode({ maxEventSize: 1024 * 1024 })))
+  const entries: Stream.Stream<NativeEventEntry, unknown> = Stream.concat(
+    Stream.map(frames, (frame) => ({ kind: "frame" as const, frame })),
+    Stream.succeed({ kind: "end" as const }),
+  )
+  return entries.pipe(
+    Stream.mapAccumEffect(
+      (): NativeEventState => ({ terminal: false, done: false, pending: [] }),
+      (state, entry) =>
+        Effect.gen(function* () {
+          if (entry.kind === "end") {
+            if (!state.done) return yield* Effect.fail(failure("unknown", "Upstream stream ended without [DONE]"))
+            return [state, state.pending] as const
+          }
+          if (entry.frame.data === "[DONE]") {
+            if (!state.terminal || state.done) return yield* Effect.fail(failure("unknown", "Upstream ended before a terminal response"))
+            const encoded = new TextEncoder().encode(Sse.encoder.write({ _tag: "Event", event: entry.frame.event, id: entry.frame.id, data: entry.frame.data }))
+            return [{ ...state, done: true, pending: [...state.pending, encoded] }, []] as const
+          }
+          if (state.terminal || state.done) return yield* Effect.fail(failure("unknown", "Events followed the terminal response"))
+          const value = yield* json(entry.frame.data).pipe(Effect.mapError((cause) => failure("unknown", "Invalid upstream SSE JSON", false, cause)))
+          const parsed = yield* decodeEvent(value).pipe(Effect.mapError((cause) => failure("unknown", `Invalid upstream event: ${cause.message}`, false, cause)))
+          if (entry.frame.event !== undefined && entry.frame.event !== "message" && entry.frame.event !== parsed.type) return yield* Effect.fail(failure("unknown", "Upstream SSE event type mismatch"))
+          const terminal = parsed.type === "response.completed" || parsed.type === "response.incomplete" || parsed.type === "response.failed"
+          if (terminal && parsed.response.status !== parsed.type.slice("response.".length)) return yield* Effect.fail(failure("unknown", "Invalid terminal response snapshot"))
+          const encoded = new TextEncoder().encode(Sse.encoder.write({ _tag: "Event", event: entry.frame.event, id: entry.frame.id, data: entry.frame.data }))
+          return terminal ? ([{ ...state, terminal: true, pending: [...state.pending, encoded] }, []] as const) : ([state, [encoded]] as const)
+        }),
+    ),
+    Stream.mapError((cause): ProviderError => (isProviderError(cause) ? cause : failure("unknown", "Upstream native stream failed", false, cause))),
+  )
+}
+
 /** Bind a private OpenAI Responses model and credentials to an Effect HTTP executor. */
 export function make(config: OpenAIResponsesDeploymentConfig): Result.Result<OpenAIResponsesDeployment<HttpClient.HttpClient>, OpenAIResponsesInvalidDeploymentUrl> {
   const parsed = Schema.decodeUnknownResult(DeploymentConfig)(config)
   if (Result.isFailure(parsed)) {
     return Result.fail(
       OpenAIResponsesInvalidDeploymentUrl.make({
-        _tag: "OpenAIResponsesInvalidDeploymentUrl",
         message: parsed.failure.message,
       }),
     )
@@ -104,7 +145,6 @@ export function make(config: OpenAIResponsesDeploymentConfig): Result.Result<Ope
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     return Result.fail(
       OpenAIResponsesInvalidDeploymentUrl.make({
-        _tag: "OpenAIResponsesInvalidDeploymentUrl",
         message: "Responses URL must use HTTP(S)",
       }),
     )
@@ -115,6 +155,20 @@ export function make(config: OpenAIResponsesDeploymentConfig): Result.Result<Ope
     protocol: "openai.responses",
     model: parsed.success.model,
     execute: {
+      direct: (request) =>
+        Effect.gen(function* () {
+          const body = yield* Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Unknown))(request.body).pipe(Effect.mapError((cause) => failure("invalid_request", cause.message, false, cause)))
+          const client = yield* HttpClient.HttpClient
+          const organization = parsed.success.organization ? HttpClientRequest.setHeader("openai-organization", parsed.success.organization) : (outgoing: HttpClientRequest.HttpClientRequest) => outgoing
+          const outgoing = HttpClientRequest.post(url.toString()).pipe(HttpClientRequest.bearerToken(parsed.success.apiKey), HttpClientRequest.setHeader("content-type", "application/json"), HttpClientRequest.bodyJsonUnsafe({ ...body, model: request.targetModel }), organization)
+          const response = yield* client.execute(outgoing).pipe(Effect.mapError((cause) => failure("unavailable", "Upstream connection failed", false, cause)))
+          if (response.status < 200 || response.status >= 300) return yield* Effect.fail(statusError(response.status))
+          return {
+            status: response.status,
+            headers: Object.fromEntries(Object.entries(response.headers)),
+            body: nativeEvents(response.stream),
+          }
+        }),
       http: (request) =>
         Effect.gen(function* () {
           yield* Effect.fromResult(toResponseRequest(request)).pipe(Effect.mapError((error) => failure(error.reason === "unsupported" ? "unsupported" : "invalid_request", error.message)))

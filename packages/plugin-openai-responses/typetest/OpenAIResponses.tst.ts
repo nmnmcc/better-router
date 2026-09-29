@@ -1,11 +1,11 @@
 import { Effect, Redacted, Result, Stream } from "effect"
 import { expect, it } from "tstyche"
-import type { ModelEvent, ModelRequest } from "@better-router/core/Model"
+import type { GenerationEvent, GenerationRequest } from "@better-router/core/Generation"
 import { make as deployment } from "@better-router/plugin-openai-responses/OpenAIResponses"
 import type { OpenAIResponsesDeployment } from "@better-router/plugin-openai-responses/OpenAIResponses"
 import { make as plugin } from "@better-router/plugin-openai-responses/OpenAIResponsesPlugin"
 
-const execute = (_request: ModelRequest): Effect.Effect<Stream.Stream<ModelEvent>> => Effect.succeed(Stream.empty)
+const execute = (_request: GenerationRequest): Effect.Effect<Stream.Stream<GenerationEvent>> => Effect.succeed(Stream.empty)
 
 it("supports optional upstream WebSocket alongside HTTP", () => {
   const openai = {

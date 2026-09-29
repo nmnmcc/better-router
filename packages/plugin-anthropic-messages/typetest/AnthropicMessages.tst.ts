@@ -1,11 +1,11 @@
 import { Effect, Redacted, Result, Stream } from "effect"
 import { expect, it } from "tstyche"
-import type { ModelEvent, ModelRequest } from "@better-router/core/Model"
+import type { GenerationEvent, GenerationRequest } from "@better-router/core/Generation"
 import { make as deployment } from "@better-router/plugin-anthropic-messages/AnthropicMessages"
 import type { AnthropicMessagesDeployment } from "@better-router/plugin-anthropic-messages/AnthropicMessages"
 import { make as plugin } from "@better-router/plugin-anthropic-messages/AnthropicMessagesPlugin"
 
-const execute = (_request: ModelRequest): Effect.Effect<Stream.Stream<ModelEvent>> => Effect.succeed(Stream.empty)
+const execute = (_request: GenerationRequest): Effect.Effect<Stream.Stream<GenerationEvent>> => Effect.succeed(Stream.empty)
 
 it("accepts HTTP but not upstream WebSocket", () => {
   const anthropic = {

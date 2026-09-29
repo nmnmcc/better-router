@@ -1,14 +1,18 @@
-import { Effect, Layer, Redacted, Result, Schema, Stream } from "effect"
+import { Effect, Layer, Option, Redacted, Result, Schema, Stream } from "effect"
 import { Sse } from "effect/unstable/encoding"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
 import { ConversionError, at, fromSchema, requireThat } from "@better-router/core/Conversion"
 import { HttpJsonError, read as readJson } from "@better-router/core/HttpJson"
 import type { HttpContribution } from "@better-router/core/Http"
-import type { ModelEvent, ModelRequest } from "@better-router/core/Model"
-import { Event, Request, Response } from "@better-router/core/ModelSchema"
+import type { GenerationEvent, GenerationRequest } from "@better-router/core/Generation"
+import { Request as GenerationRequestSchema } from "@better-router/core/GenerationSchema"
+import type { ProtocolDefinition } from "@better-router/core/Projection"
 import { RouterError } from "@better-router/core/Router"
 import type { Router } from "@better-router/core/Router"
+import { complete as completeGeneration } from "@better-router/core/Execution"
+import type { Execution } from "@better-router/core/Execution"
+import { Event, Request, Response } from "./OpenAIResponsesSchema.js"
 
 export interface OpenAIResponsesHttpOptions {
   readonly gatewayKey: Redacted.Redacted<string>
@@ -17,6 +21,19 @@ export interface OpenAIResponsesHttpOptions {
 export const OpenAIResponsesHttpError = Schema.Struct({ error: Schema.Struct({ message: Schema.String, type: Schema.String }) })
 export const OpenAIResponsesConversionError = ConversionError
 export type OpenAIResponsesConversionError = ConversionError
+
+export const projection: ProtocolDefinition<string, unknown> = {
+  id: "openai.responses",
+  protocol: "openai.responses",
+  capability: "generation",
+  decode: toResponseRequest,
+  encodeEvent: (event) => Result.mapError(Result.map(Schema.encodeUnknownResult(Event)(event), frame), (error) => fromSchema(error, "event")),
+  encodeResponse: (response) => Result.mapError(Schema.encodeUnknownResult(Response)(response), (error) => fromSchema(error, "response")),
+  encodeEvents: (events, context) => frames(events, context.model),
+}
+
+const NativeRequest = Schema.StructWithRest(Schema.Struct({ model: Schema.String, stream: Schema.optional(Schema.Boolean) }), [Schema.Record(Schema.String, Schema.Unknown)] as const)
+export const toNativeRequest = (value: unknown): Result.Result<{ readonly model: string; readonly stream?: boolean }, ConversionError> => Result.map(Schema.decodeUnknownResult(NativeRequest)(value), ({ model, stream }) => ({ model, ...(stream === undefined ? {} : { stream }) })).pipe(Result.mapError((error) => fromSchema(error, "request")))
 
 export const api = HttpApi.make("openai-responses").add(
   HttpApiGroup.make("openAIResponses").add(
@@ -62,7 +79,7 @@ const collectInputFacts = (request: typeof Request.Type): InputFacts => {
 }
 
 /** Decode the complete wire shape, then reject semantics this ingress cannot project. */
-export function toResponseRequest(value: unknown): Result.Result<ModelRequest, ConversionError> {
+export function toResponseRequest(value: unknown): Result.Result<GenerationRequest, ConversionError> {
   return Result.gen(function* () {
     const request = yield* Result.mapError(Schema.decodeUnknownResult(Request)(value, { onExcessProperty: "error" }), (error) => fromSchema(error, "request"))
     yield* requireThat(!!request.model, "request.model", "invalid", "model is required")
@@ -76,11 +93,11 @@ export function toResponseRequest(value: unknown): Result.Result<ModelRequest, C
       const tool = request.tools.findIndex((entry) => entry.type !== "function")
       if (tool >= 0) return yield* Result.fail(at(`request.tools[${tool}].type`, "unsupported", "only function tools are portable"))
     }
-    return request
+    return yield* Result.mapError(Schema.decodeUnknownResult(GenerationRequestSchema)(request), (error) => fromSchema(error, "request"))
   })
 }
 
-const frame = (event: ModelEvent | "[DONE]"): string =>
+const frame = (event: GenerationEvent | "[DONE]"): string =>
   Sse.encoder.write({
     _tag: "Event",
     event: event === "[DONE]" ? "message" : event.type,
@@ -88,7 +105,15 @@ const frame = (event: ModelEvent | "[DONE]"): string =>
     data: event === "[DONE]" ? event : JSON.stringify(event),
   })
 
-const frames = (source: Stream.Stream<ModelEvent, RouterError>, model: string): Stream.Stream<string> =>
+const nativeErrorFrame = (message: string): string =>
+  Sse.encoder.write({
+    _tag: "Event",
+    event: "error",
+    id: undefined,
+    data: JSON.stringify({ type: "error", error: { message } }),
+  })
+
+const frames = (source: Stream.Stream<GenerationEvent, unknown>, model: string): Stream.Stream<string> =>
   Stream.concat(source, Stream.succeed({ type: "end" as const })).pipe(
     Stream.mapAccumEffect(
       () => ({ terminal: false, sequence: 0 }),
@@ -136,7 +161,7 @@ function onError(error: unknown) {
       ProviderFailed: ({ cause }) => errorResponse(cause.kind === "rate_limited" ? 429 : cause.kind === "timeout" ? 504 : cause.kind === "unavailable" ? 503 : cause.kind === "invalid_request" ? 400 : cause.kind === "unsupported" ? 422 : 502, cause.message, "upstream_error"),
       InvalidResponse: () => errorResponse(502, "Model execution failed", "upstream_error"),
       RoutingFailed: () => errorResponse(502, "Model execution failed", "upstream_error"),
-      TransformFailed: () => errorResponse(502, "Model execution failed", "upstream_error"),
+      MiddlewareFailed: () => errorResponse(502, "Model execution failed", "upstream_error"),
     })
   return errorResponse(500, "Gateway failed", "server_error")
 }
@@ -144,15 +169,29 @@ function onError(error: unknown) {
 const handle = (router: Router, request: HttpServerRequest.HttpServerRequest, key: Redacted.Redacted<string>) =>
   Effect.gen(function* () {
     const body = yield* readJson(request, request.headers.authorization === `Bearer ${Redacted.value(key)}`)
+    const nativeRequest = yield* Effect.fromResult(toNativeRequest(body))
+    const direct = nativeRequest.stream === true ? Option.some(yield* router.invoke({ type: "protocol", request: { protocol: "openai.responses", model: nativeRequest.model, body, headers: Object.fromEntries(Object.entries(request.headers)) } })) : Option.none<Execution>()
+    if (Option.isSome(direct) && direct.value.type === "opaque") {
+      const nativeBody = direct.value.response.body.pipe(Stream.catch((error) => Stream.succeed(new TextEncoder().encode(nativeErrorFrame(error instanceof Error ? error.message : "Upstream stream failed")))))
+      return HttpServerResponse.stream(nativeBody, {
+        status: direct.value.response.status,
+        headers: direct.value.response.headers,
+        contentType: direct.value.response.headers["content-type"],
+      })
+    }
     const converted = yield* Effect.fromResult(toResponseRequest(body))
     if (converted.stream) {
-      const events = yield* router.open(converted)
-      return HttpServerResponse.stream(frames(events, converted.model).pipe(Stream.encodeText), {
+      const execution = Option.isSome(direct) ? direct.value : yield* router.invoke({ type: "generation", request: converted })
+      if (execution.type !== "generation") return yield* Effect.fail(RouterError.cases.InvalidResponse.make({ message: "Expected generation events" }))
+      const events = execution.events
+      return HttpServerResponse.stream(projection.encodeEvents!(events, { model: converted.model }).pipe(Stream.encodeText), {
         headers: { "cache-control": "no-cache", "x-accel-buffering": "no" },
         contentType: "text/event-stream; charset=utf-8",
       })
     }
-    const response = yield* router.complete(converted)
+    const execution = yield* router.invoke({ type: "generation", request: converted })
+    if (execution.type !== "generation") return yield* Effect.fail(RouterError.cases.InvalidResponse.make({ message: "Expected generation events" }))
+    const response = yield* completeGeneration(execution.events)
     const projected = yield* Effect.fromResult(Result.mapError(Schema.decodeUnknownResult(Response)({ ...response, model: converted.model }), (error) => fromSchema(error, "response"))).pipe(Effect.mapError((error) => RouterError.cases.InvalidResponse.make({ message: error.message })))
     return HttpServerResponse.jsonUnsafe(projected)
   }).pipe(Effect.catch((error) => Effect.succeed(onError(error))))

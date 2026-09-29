@@ -1,8 +1,8 @@
 import assert from "node:assert/strict"
 import { it } from "vitest"
 import { Redacted, Result, Schema } from "effect"
-import { snapshot } from "@better-router/core/ModelEvents"
-import type { ModelRequest } from "@better-router/core/Model"
+import { snapshot } from "@better-router/core/GenerationEvents"
+import type { GenerationRequest } from "@better-router/core/Generation"
 import { AnthropicEvent, make, toMessagesRequest } from "@better-router/plugin-anthropic-messages/AnthropicMessages"
 import { AnthropicMessage, AnthropicOutboundEvent, AnthropicRequest, toMessage, toResponseRequest } from "@better-router/plugin-anthropic-messages/AnthropicMessagesHttp"
 
@@ -71,7 +71,7 @@ it("deployment construction rejects invalid configuration as data", () => {
 })
 
 it("upstream conversion rejects unportable phase, annotations and strict tool semantics", () => {
-  const cases: readonly [ModelRequest, string][] = [
+  const cases: readonly [GenerationRequest, string][] = [
     [{ model: "private", input: [{ type: "message", role: "assistant", phase: "commentary", content: "Working" }] }, "phase"],
     [{ model: "private", input: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "Hi", annotations: [{ type: "url_citation", start_index: 0, end_index: 2, url: "https://example.com", title: "Source" }] }] }] }, "annotations"],
     [{ model: "private", tools: [{ type: "function", name: "lookup", strict: true }] }, "strict"],

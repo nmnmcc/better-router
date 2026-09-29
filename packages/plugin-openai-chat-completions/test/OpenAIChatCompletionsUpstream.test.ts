@@ -6,6 +6,7 @@ import { it as test } from "@effect/vitest"
 import { Effect, Redacted, Ref, Result, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { make as makeRouter } from "@better-router/core/Router"
+import { complete as completeGeneration } from "@better-router/core/Execution"
 import { OpenAIChatCompletions, OpenAIChatCompletionsPlugin } from "@better-router/plugin-openai-chat-completions"
 
 test.effect("Chat Completions deployment streams text and usage through the router", () =>
@@ -51,7 +52,8 @@ test.effect("Chat Completions deployment streams text and usage through the rout
         plugins: [OpenAIChatCompletionsPlugin.make({ deployments: [deployment] })],
         routes: [{ model: "public", deployments: ["chat-upstream"] }],
       }).pipe(
-        Effect.flatMap((router) => router.complete({ model: "public", input: "Hi" })),
+        Effect.flatMap((router) => router.invoke({ type: "generation", request: { model: "public", input: "Hi" } })),
+        Effect.flatMap((execution) => (execution.type === "generation" ? completeGeneration(execution.events) : Effect.die("Expected generation execution"))),
         Effect.provide(NodeHttpClient.layerUndici),
       )
       assert.equal(response.status, "completed")

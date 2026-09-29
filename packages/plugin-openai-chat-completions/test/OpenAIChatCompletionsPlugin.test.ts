@@ -3,9 +3,9 @@ import { it as test } from "@effect/vitest"
 import { Effect, Layer, Redacted, Ref, Stream } from "effect"
 import { HttpClient, HttpRouter, HttpServer } from "effect/unstable/http"
 import { make as makeRouter } from "@better-router/core/Router"
-import type { ModelDeployment } from "@better-router/core/Deployment"
-import type { ModelEvent } from "@better-router/core/Model"
-import { snapshot } from "@better-router/core/ModelEvents"
+import type { Deployment } from "@better-router/core/Deployment"
+import type { GenerationEvent } from "@better-router/core/Generation"
+import { snapshot } from "@better-router/core/GenerationEvents"
 import type { RouterPlugin } from "@better-router/core/Plugin"
 import { OpenAIChatCompletionsPlugin } from "@better-router/plugin-openai-chat-completions"
 
@@ -13,7 +13,7 @@ test.effect("Chat Completions ingress runs against a non-OpenAI deployment", () 
   Effect.scoped(
     Effect.gen(function* () {
       const invokedModels = yield* Ref.make<readonly string[]>([])
-      const local: ModelDeployment = {
+      const local: Deployment = {
         id: "local",
         provider: "local",
         protocol: "local.responses",
@@ -32,7 +32,7 @@ test.effect("Chat Completions ingress runs against a non-OpenAI deployment", () 
                     sequence_number: 3,
                     response: snapshot(request, "resp_local", 1234, request.model, [item], "completed", null, 1235),
                   },
-                ] as ModelEvent[])
+                ] as GenerationEvent[])
               }),
             ),
         },

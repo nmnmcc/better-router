@@ -4,20 +4,20 @@ Effect-based, type-first LLM router workspace. Chat Completions, OpenAI Response
 
 The application is configured once with model routes and a list of declarative plugins. The same configured router serves in-process SDK calls and, when plugins contribute HTTP endpoints, a hosted HTTP application. There is no gateway plugin or imperative plugin registry.
 
-| Package                                         | Responsibility                                                                                         |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `@better-router/core`                           | OpenResponses IR, deployments, routing, transforms, HTTP composition, and declarative plugin contracts |
-| `@better-router/plugin-openai-chat-completions` | Chat Completions HTTP ingress and upstream executor                                                    |
-| `@better-router/plugin-openai-responses`        | Responses HTTP ingress and upstream executor                                                           |
-| `@better-router/plugin-anthropic-messages`      | Anthropic Messages HTTP ingress and upstream executor                                                  |
+| Package                                         | Responsibility                                                                                                                                               |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@better-router/core`                           | Capability catalog, direct pipelines, projections, execution lifecycle, deployments, routing, middleware, HTTP composition, and declarative plugin contracts |
+| `@better-router/plugin-openai-chat-completions` | Chat Completions HTTP ingress and upstream executor                                                                                                          |
+| `@better-router/plugin-openai-responses`        | Responses HTTP ingress and upstream executor                                                                                                                 |
+| `@better-router/plugin-anthropic-messages`      | Anthropic Messages HTTP ingress and upstream executor                                                                                                        |
 
-Packages are flat under `packages/`, with plugins named `plugin-{creator}-{protocol}`. Like Effect, each package exposes focused modules by name from its root and by subpath: `@better-router/core` exposes `Conversion`, `Model`, `ModelEvents`, `ModelSchema`, `OpenResponses`, `Deployment`, `Routing`, `Transform`, `Http`, `Plugin`, and `Router`. Each protocol plugin exposes its conversion, HTTP and plugin modules. Nine independently runnable workspaces live under [examples/matrix](examples/matrix/README.md).
+Packages are flat under `packages/`, with plugins named `plugin-{creator}-{protocol}`. Like Effect, each package exposes focused modules by name from its root and by subpath: `@better-router/core` exposes `Capability`, `Pipeline`, `Execution`, `Generation`, `GenerationSchema`, `GenerationEvents`, `Projection`, `Ingress`, `Registry`, `Services`, `Conversion`, `Deployment`, `Routing`, `Middleware` (through `Pipeline`), `Http`, `Plugin`, and `Router`. The OpenAI Responses wire types and schemas belong to `@better-router/plugin-openai-responses`; each protocol plugin owns its conversion, HTTP and plugin modules. Nine independently runnable workspaces live under [examples/matrix](examples/matrix/README.md).
 
-Each `Plugin.make` can declare an authenticated HTTP ingress, deployments, or both. The SDK calls `router.open`, `router.stream`, or `router.complete` directly; a server host serves `router.http.routes` with Effect's `HttpRouter`. There is no separate gateway plugin or protocol-bypass path.
+Each `Plugin.make` declares an authenticated HTTP ingress, deployments, direct pipelines, protocol projections, and any required resources. SDK callers use `router.invoke` with a semantic command; a server host serves `router.http.routes` with Effect's `HttpRouter`. Same-protocol requests may use a declared direct pipeline and return an opaque response; otherwise the ingress selects the registered projection and enters the semantic generation pipeline. A protocol command never carries a conversion closure from the caller.
 
 The canonical request, event stream, and full response follow [OpenResponses 2026-04-24](https://www.openresponses.org/specification); `yarn generate:openresponses` regenerates the pinned types. See [Architecture](docs/architecture.md) for the proposed interfaces, lifecycle, and routing rules, and [Context](CONTEXT.md) for the terms used here.
 
-All three ingresses convert to the OpenResponses request IR. `Router.make` validates and composes deployments, routing policies, transforms, and HTTP fragments. Each deployment reads an upstream SSE stream through Effect `HttpClient`, even when the caller requested JSON. See [Architecture](docs/architecture.md) for the supported portable subset and explicit rejections.
+Cross-protocol ingresses use a generation projection command. Same-protocol direct pipelines keep the original JSON/SSE body and only replace the routed private model. `Router.make` validates and composes deployments, pipelines, routing policies, middleware, projections, and HTTP fragments. See [Architecture](docs/architecture.md) for the supported portable subset and explicit rejections.
 
 The nine protocol-matrix examples are runnable TypeScript workspaces. Build the library dependencies, then follow [the matrix example instructions](examples/matrix/README.md) to start a selected source-to-target combination:
 

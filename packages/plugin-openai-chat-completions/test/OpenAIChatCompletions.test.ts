@@ -19,6 +19,7 @@ test("conversion errors are schema-backed values", () => {
   assert.equal(error.message, "messages[0]: unknown role")
   const encoded = Schema.encodeSync(OpenAIChatCompletionsConversionError)(error)
   assert.deepEqual(encoded, {
+    _tag: "ConversionError",
     path: "messages[0]",
     reason: "unsupported",
     message: "messages[0]: unknown role",
