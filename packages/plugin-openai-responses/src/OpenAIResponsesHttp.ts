@@ -1,13 +1,13 @@
 import { Effect, Layer, Match, Option, Redacted, Result, Schema, Stream } from "effect"
-import { Sse } from "effect/unstable/encoding"
-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { Sse } from "effect/encoding"
+import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import {
 	HttpApi,
 	HttpApiBuilder,
 	HttpApiEndpoint,
 	HttpApiGroup,
 	HttpApiSchema,
-} from "effect/unstable/httpapi"
+} from "effect/http-api"
 import { ConversionError, at, fromSchema, requireThat } from "@better-router/core/Conversion"
 import { HttpJsonError, read as readJson } from "@better-router/core/HttpJson"
 import type { HttpContribution } from "@better-router/core/Http"

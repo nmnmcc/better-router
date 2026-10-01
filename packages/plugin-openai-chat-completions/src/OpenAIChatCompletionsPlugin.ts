@@ -1,5 +1,5 @@
 import type { Redacted } from "effect"
-import type { HttpClient } from "effect/unstable/http"
+import type { HttpClient } from "effect/http"
 import type { RouterPlugin } from "@better-router/core/Plugin"
 import type { DirectPipelineFor } from "@better-router/core/Pipeline"
 import * as OpenAIChatCompletionsHttp from "./OpenAIChatCompletionsHttp.js"

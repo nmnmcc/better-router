@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import type { Effect, Scope } from "effect"
-import type { HttpApi } from "effect/unstable/httpapi"
+import type { HttpApi } from "effect/http-api"
 import type { Capability } from "./Capability.js"
 import type { Deployment } from "./Deployment.js"
 import type { HttpContribution } from "./Http.js"

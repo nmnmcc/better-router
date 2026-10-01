@@ -5,7 +5,7 @@ import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import { it as test } from "@effect/vitest"
 import { Effect, Redacted, Ref, Result, Stream } from "effect"
 import { make as makeRouter } from "@better-router/core/Router"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/http"
 import { complete as completeGeneration } from "@better-router/core/Execution"
 import {
 	AnthropicMessages,

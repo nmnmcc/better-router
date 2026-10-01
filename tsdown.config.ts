@@ -6,6 +6,7 @@ const packages = {
 		"Catalog",
 		"Conversion",
 		"Deployment",
+		"EffectAI",
 		"Execution",
 		"Generation",
 		"GenerationEvents",

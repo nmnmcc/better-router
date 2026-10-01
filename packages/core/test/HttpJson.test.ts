@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { it } from "@effect/vitest"
 import { Effect, Stream } from "effect"
-import type { HttpServerRequest } from "effect/unstable/http"
+import type { HttpServerRequest } from "effect/http"
 import { HttpJsonError, read } from "@better-router/core/HttpJson"
 
 const request = (

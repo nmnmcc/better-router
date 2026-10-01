@@ -11,8 +11,8 @@
 		"@better-router/plugin-anthropic-messages": "workspace:*",
 		"@better-router/plugin-openai-chat-completions": "workspace:*",
 		"@better-router/plugin-openai-responses": "workspace:*",
-		"@effect/platform-node": "4.0.0-rc.117",
-		"effect": "4.0.0-rc.117"
+		"@effect/platform-node": "4.0.0",
+		"effect": "4.0.0"
 	},
 	"devDependencies": {
 		"@types/node": "^24.0.0",

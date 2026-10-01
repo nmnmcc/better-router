@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { it } from "@effect/vitest"
 import { Effect, Redacted, Ref, Result, Schema, Stream } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/http"
 import { snapshot } from "@better-router/core/GenerationEvents"
 import {
 	make,

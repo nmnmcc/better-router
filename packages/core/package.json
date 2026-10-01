@@ -21,9 +21,9 @@
 		"check": "tsc -b --pretty false"
 	},
 	"peerDependencies": {
-		"effect": "4.0.0-rc.117"
+		"effect": "4.0.0"
 	},
 	"devDependencies": {
-		"effect": "4.0.0-rc.117"
+		"effect": "4.0.0"
 	}
 }

@@ -1,5 +1,5 @@
 import { Chunk, Effect, Schema, Stream } from "effect"
-import type { HttpServerRequest } from "effect/unstable/http"
+import type { HttpServerRequest } from "effect/http"
 
 export class HttpJsonError extends Schema.TaggedError<HttpJsonError>()("HttpJsonError", {
 	status: Schema.Number,

@@ -1,10 +1,10 @@
 # Architecture
 
-The router uses Effect 4.0.0-rc.117 end to end. Chat Completions, OpenAI Responses, and Anthropic Messages each contribute an ingress projection and provider pipelines. A plugin declaration is pure; `Router.layer` assembles its services and owns resources in the host Scope.
+The router uses Effect 4.0.0 end to end. Chat Completions, OpenAI Responses, and Anthropic Messages each contribute an ingress projection and provider pipelines. A plugin declaration is pure; `Router.layer` assembles its services and owns resources in the host Scope.
 
 ## Modules and IR
 
-The flat workspace names plugins `plugin-{creator}-{protocol}` and exposes PascalCase modules directly from each package. Core owns `Capability`, `Catalog`, `Pipeline`, `Execution`, `Lifecycle`, `Generation`, `GenerationSchema`, `GenerationEvents`, `Projection`, `Runtime`, `Ingress`, `Registry`, `Services`, `Conversion`, `HttpJson`, `Deployment`, `Routing`, `Http`, `Plugin`, and `Router`. Each protocol package owns its wire decoder, protocol projection, HTTP endpoint and provider generation pipeline; protocol packages do not depend on each other. `GenerationEvents.fromNative` is a generation assembler, not a provider-specific execution hook.
+The flat workspace names plugins `plugin-{creator}-{protocol}` and exposes PascalCase modules directly from each package. Core owns `Capability`, `Catalog`, `Pipeline`, `Execution`, `EffectAI`, `Lifecycle`, `Generation`, `GenerationSchema`, `GenerationEvents`, `Projection`, `Runtime`, `Ingress`, `Registry`, `Services`, `Conversion`, `HttpJson`, `Deployment`, `Routing`, `Http`, `Plugin`, and `Router`. Each protocol package owns its wire decoder, protocol projection, HTTP endpoint and provider generation pipeline; protocol packages do not depend on each other. `GenerationEvents.fromNative` is a generation assembler, not a provider-specific execution hook.
 
 `GenerationRequest`, `GenerationEvent`, and `GenerationResponse` are the internal semantic generation contract. `GenerationSchema` is defined only from those domain values; it has no dependency on an HTTP specification. The OpenAI Responses plugin owns the generated wire types and pinned runtime schema. A plugin's `ProtocolDefinition` is the external bidirectional projection: it decodes its wire request into generation semantics and owns response encoding for its clients. Stateless event encoders validate or encode one event; protocols whose event wire format needs sequence-local state (Chat Completions and Messages) deliberately reject that operation and expose the stateful `encodeEvents` stream projector instead. A protocol command can therefore be routed through a direct opaque pipeline without first projecting, or fall back to the registered projection without carrying an ad-hoc conversion closure. `devenv shell -- yarn generate:openresponses --check` verifies the pinned Responses plugin artifacts; see [source notes](openresponses-research.md) for schema/prose differences.
 
@@ -21,6 +21,24 @@ All errors in public router and plugin contracts are Schema-backed data. `Plugin
 The functional boundary is explicit: domain transitions use `Option`, immutable arrays and Effect `HashMap`/`HashSet` with pure reducers; stream accumulators start anew for each subscription. `Effect.forEach` sequences item effects. Host Layers and tests may use scoped `Ref`/`Deferred` for unavoidable coordination, while native server, process, buffer, file, clock and Promise operations stay at host boundaries. Review forbids loops, variable/property reassignment, mutable collections, mutation through collection callbacks, ad hoc classes and thrown exceptions in domain code; declarative `Schema.TaggedError` classes are the typed error contract. There is intentionally no automatic syntax gate.
 
 `router.invoke(command, options)` is the single execution seam. A generation command returns semantic events; a protocol command may return an opaque response from a declared `DirectPipeline`, or fall back to a registry projection when no direct path exists. `Execution.complete` consumes one generation stream and requires one terminal snapshot. Every execution owns a `Deferred` cancellation signal that interrupts its response stream. Construction is lazy; `Effect`, `Stream`, `Layer` and `Scope` determine when I/O starts, who owns it, and how cancellation propagates.
+
+`EffectAI.model(alias)` is the in-process upstream Layer for Effect AI. It
+provides `LanguageModel.LanguageModel`, `Model.ProviderName` as
+`"better-router"`, and `Model.ModelName` as the route alias while requiring
+`RouterRuntime`. `LanguageModel.make` owns structured-output decoding and
+toolkit execution; the adapter only projects portable `Prompt` values into a
+`GenerationRequest` with the fixed alias, stream flag, continuation ID,
+portable function tools, tool choice, and JSON Schema response format.
+
+Non-streaming calls complete `Execution` and map the terminal response into
+Effect AI response parts. Streaming calls keep immutable state local to each
+subscription so metadata, text/reasoning boundaries, incremental tool
+arguments, decoded tool calls, and finish parts remain ordered. A failed
+terminal response emits an error part followed by `finish(error)` for streams;
+router stream failures use the Effect error channel. Both completion and stream
+consumption call `Execution.cancel` during finalization, including interruption.
+Prompt files/images, approvals, provider metadata, and provider-defined or
+dynamic tools are rejected as typed `AiError` values rather than discarded.
 
 Routes list deployment IDs in fallback order; a policy may return an ordered subset of eligible candidates. A required upstream mode filters candidates before ranking, while a preferred mode uses that mode when available and otherwise selects another executor on the same deployment. Ingress HTTP versus SSE does not select upstream transport. A retryable connection or event error may move to the next deployment only before the first model event; after that, partial output must not be replayed. Middleware wraps the complete command handler in declared order, first middleware outermost.
 

@@ -12,7 +12,7 @@ import {
 	Stream,
 } from "effect"
 import type { Scope } from "effect"
-import { HttpApi } from "effect/unstable/httpapi"
+import { HttpApi } from "effect/http-api"
 import { ProviderError } from "./Deployment.js"
 import type { InvocationOptions } from "./Deployment.js"
 import type { HttpHostServices } from "./Http.js"

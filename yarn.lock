@@ -51,9 +51,9 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@better-router/core@workspace:packages/core"
   dependencies:
-    effect: "npm:4.0.0-rc.117"
+    effect: "npm:4.0.0"
   peerDependencies:
-    effect: 4.0.0-rc.117
+    effect: 4.0.0
   languageName: unknown
   linkType: soft
 
@@ -65,9 +65,9 @@ __metadata:
     "@better-router/plugin-anthropic-messages": "workspace:*"
     "@better-router/plugin-openai-chat-completions": "workspace:*"
     "@better-router/plugin-openai-responses": "workspace:*"
-    "@effect/platform-node": "npm:4.0.0-rc.117"
+    "@effect/platform-node": "npm:4.0.0"
     "@types/node": "npm:^24.0.0"
-    effect: "npm:4.0.0-rc.117"
+    effect: "npm:4.0.0"
     tsx: "npm:^4.23.15"
   languageName: unknown
   linkType: soft
@@ -79,9 +79,9 @@ __metadata:
     "@better-router/core": "workspace:*"
     "@better-router/plugin-openai-chat-completions": "workspace:*"
     "@better-router/plugin-openai-responses": "workspace:*"
-    "@effect/platform-node": "npm:4.0.0-rc.117"
+    "@effect/platform-node": "npm:4.0.0"
     "@types/node": "npm:^24.0.0"
-    effect: "npm:4.0.0-rc.117"
+    effect: "npm:4.0.0"
     tsx: "npm:^4.23.15"
   languageName: unknown
   linkType: soft
@@ -92,9 +92,9 @@ __metadata:
   dependencies:
     "@better-router/core": "workspace:*"
     "@better-router/plugin-openai-responses": "workspace:*"
-    "@effect/platform-node": "npm:4.0.0-rc.117"
+    "@effect/platform-node": "npm:4.0.0"
     "@types/node": "npm:^24.0.0"
-    effect: "npm:4.0.0-rc.117"
+    effect: "npm:4.0.0"
     tsx: "npm:^4.23.15"
   languageName: unknown
   linkType: soft
@@ -104,9 +104,9 @@ __metadata:
   resolution: "@better-router/plugin-anthropic-messages@workspace:packages/plugin-anthropic-messages"
   dependencies:
     "@better-router/core": "workspace:*"
-    effect: "npm:4.0.0-rc.117"
+    effect: "npm:4.0.0"
   peerDependencies:
-    effect: 4.0.0-rc.117
+    effect: 4.0.0
   languageName: unknown
   linkType: soft
 
@@ -115,9 +115,9 @@ __metadata:
   resolution: "@better-router/plugin-openai-chat-completions@workspace:packages/plugin-openai-chat-completions"
   dependencies:
     "@better-router/core": "workspace:*"
-    effect: "npm:4.0.0-rc.117"
+    effect: "npm:4.0.0"
   peerDependencies:
-    effect: 4.0.0-rc.117
+    effect: 4.0.0
   languageName: unknown
   linkType: soft
 
@@ -126,44 +126,44 @@ __metadata:
   resolution: "@better-router/plugin-openai-responses@workspace:packages/plugin-openai-responses"
   dependencies:
     "@better-router/core": "workspace:*"
-    effect: "npm:4.0.0-rc.117"
+    effect: "npm:4.0.0"
   peerDependencies:
-    effect: 4.0.0-rc.117
+    effect: 4.0.0
   languageName: unknown
   linkType: soft
 
-"@effect/platform-node-shared@npm:^4.0.0-rc.117":
-  version: 4.0.0-rc.117
-  resolution: "@effect/platform-node-shared@npm:4.0.0-rc.117"
+"@effect/platform-node-shared@npm:^4.0.0":
+  version: 4.0.0
+  resolution: "@effect/platform-node-shared@npm:4.0.0"
   dependencies:
     "@types/ws": "npm:^8.18.1"
-    ws: "npm:^8.21.3"
+    ws: "npm:^8.22.0"
   peerDependencies:
-    effect: ^4.0.0-rc.117
-  checksum: 10c0/263a6864ce5f12d5bca8c2930b3ec426b6d072fa3758635ac2e9249a732dedd4934037fdde0674da75fefa97103e62df42de9499cea60aad3b7fc2c986313a90
+    effect: ^4.0.0
+  checksum: 10c0/872eeeec766bb042a1ef7dc3369ac3e8bdd1bba37bc120ac3e9e4db0868d6415ddbecf2a2bd50785c59ef528c9166ac2ca673aadc684daeb0accf7f250c43c67
   languageName: node
   linkType: hard
 
-"@effect/platform-node@npm:4.0.0-rc.117":
-  version: 4.0.0-rc.117
-  resolution: "@effect/platform-node@npm:4.0.0-rc.117"
+"@effect/platform-node@npm:4.0.0":
+  version: 4.0.0
+  resolution: "@effect/platform-node@npm:4.0.0"
   dependencies:
-    "@effect/platform-node-shared": "npm:^4.0.0-rc.117"
-    undici: "npm:^8.10.2"
+    "@effect/platform-node-shared": "npm:^4.0.0"
+    undici: "npm:^8.11.2"
   peerDependencies:
-    effect: ^4.0.0-rc.117
+    effect: ^4.0.0
     redis: ">=5.0.0 <7.0.0"
-  checksum: 10c0/ef459961f30c1f1509c70e280bb3e59eead8eac8b1eebdf07841d75be83162a036837f50f86a8b463bcc591e91d86f15d2c2e1516a58db05cce16a5b26525949
+  checksum: 10c0/2657631ede73c0ff55daf6260e9fdfce16c18c98160d5ada7f15f8c92f4fcf3f9b8ce396d7853134f8005969ae71bff0fc8de603037c014f22a1169b1c6c4a9d
   languageName: node
   linkType: hard
 
-"@effect/vitest@npm:4.0.0-rc.117":
-  version: 4.0.0-rc.117
-  resolution: "@effect/vitest@npm:4.0.0-rc.117"
+"@effect/vitest@npm:4.0.0":
+  version: 4.0.0
+  resolution: "@effect/vitest@npm:4.0.0"
   peerDependencies:
-    effect: ^4.0.0-rc.117
+    effect: ^4.0.0
     vitest: ">=5.0.0 <6.0.0"
-  checksum: 10c0/20debb7236b461c1372ab21d67066ac74310dc9f98f4643bcf306f494989d08ec3e3e7c6173a43e1e4d4a548a895b8f2997bd3220f1d2077ab2057b3ffe35e51
+  checksum: 10c0/baec89578bc430c283f56b9f0346b38a403a6ac81194222d8888ead2f1d281379133b1fde6666b08b3e9e618e73bcd9c7ac632f821a0f1f74ffe8e3c34ad7681
   languageName: node
   linkType: hard
 
@@ -970,11 +970,11 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "better-router@workspace:."
   dependencies:
-    "@effect/platform-node": "npm:4.0.0-rc.117"
-    "@effect/vitest": "npm:4.0.0-rc.117"
+    "@effect/platform-node": "npm:4.0.0"
+    "@effect/vitest": "npm:4.0.0"
     "@types/node": "npm:^24.0.0"
     "@vitest/coverage-v8": "npm:5.0.1"
-    effect: "npm:4.0.0-rc.117"
+    effect: "npm:4.0.0"
     tsdown: "npm:0.23.0"
     tstyche: "npm:^7.2.5"
     typescript: "npm:7.0.2"
@@ -1030,10 +1030,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"effect@npm:4.0.0-rc.117":
-  version: 4.0.0-rc.117
-  resolution: "effect@npm:4.0.0-rc.117"
-  checksum: 10c0/dba2072163d6ed630edb821c5bcc9eb620ef1d78caa557f039a231a5425848c2befae35cc44b23cdcdb5a4d949d3ec0c52c281f6c1e7dcfbacba7c4bac44245e
+"effect@npm:4.0.0":
+  version: 4.0.0
+  resolution: "effect@npm:4.0.0"
+  checksum: 10c0/c9cd4c151a0d5141c82331e313fcfa5ba2ac99c6b3cc3d310eb92925286efe96487685f2a3b215a2470b9ee50b0e2f10c187149b820c696c9b1d7d0edd3a6e3c
   languageName: node
   linkType: hard
 
@@ -1936,7 +1936,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"undici@npm:^8.10.2, undici@npm:^8.4.1":
+"undici@npm:^8.11.2":
+  version: 8.11.2
+  resolution: "undici@npm:8.11.2"
+  checksum: 10c0/106f6991178fb7562fd90cdec7993c5f807a9428682306091f0c4b27fc474ec291f868e29972c6252988bf061ad193df943b3b99e775be157a28d92bbb95699d
+  languageName: node
+  linkType: hard
+
+"undici@npm:^8.4.1":
   version: 8.11.0
   resolution: "undici@npm:8.11.0"
   checksum: 10c0/a6a0d8da384d88dc9780fdb03f099d17fc06d1085854214c4e8ab5c69c4731778c5207fa62b54170327afa21e0d412665bd4e40683122bcbcbf9075801c75cb3
@@ -2091,9 +2098,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ws@npm:^8.21.3":
-  version: 8.21.3
-  resolution: "ws@npm:8.21.3"
+"ws@npm:^8.22.0":
+  version: 8.22.0
+  resolution: "ws@npm:8.22.0"
   peerDependencies:
     bufferutil: ^4.0.1
     utf-8-validate: ">=5.0.2"
@@ -2102,7 +2109,7 @@ __metadata:
       optional: true
     utf-8-validate:
       optional: true
-  checksum: 10c0/7b28dc2863ea0e2cece68d142a3eee90361021b73f750431e6d8076bb7dede5fdfdb75b3d29534b62f411261147b76b1bc80fb5cc63ab0aabd467280e85b22e0
+  checksum: 10c0/7304d14ef38898dd366a528a85e2da389c4eebf30f4ce8a007bd2dce6025f9b619cefe44fe2354f0bad0ec541b1c9a4da06a3f3e046ab56f01fd52d5784ecfb2
   languageName: node
   linkType: hard
 

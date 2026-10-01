@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { it as test } from "@effect/vitest"
 import { Effect, Layer, Redacted, Ref, Stream } from "effect"
-import { HttpClient, HttpRouter, HttpServer } from "effect/unstable/http"
+import { HttpClient, HttpRouter, HttpServer } from "effect/http"
 import { make as makeRouter } from "@better-router/core/Router"
 import { RouterError } from "@better-router/core/Router"
 import { RoutingError } from "@better-router/core/Routing"

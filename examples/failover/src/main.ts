@@ -10,7 +10,7 @@ import {
 import { OpenAIChatCompletionsPlugin } from "@better-router/plugin-openai-chat-completions"
 import { OpenAIResponses, OpenAIResponsesPlugin } from "@better-router/plugin-openai-responses"
 import { Config, Effect, Layer } from "effect"
-import { HttpRouter } from "effect/unstable/http"
+import { HttpRouter } from "effect/http"
 
 const settings = Config.all({
 	gatewayKey: Config.Redacted("GATEWAY_API_KEY"),

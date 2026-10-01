@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { it as test } from "@effect/vitest"
 import { Effect, Layer, Redacted, Ref, Stream } from "effect"
-import { HttpClient, HttpRouter, HttpServer } from "effect/unstable/http"
+import { HttpClient, HttpRouter, HttpServer } from "effect/http"
 import type { GenerationEvent } from "@better-router/core/Generation"
 import { snapshot } from "@better-router/core/GenerationEvents"
 import { make as makeRouter } from "@better-router/core/Router"

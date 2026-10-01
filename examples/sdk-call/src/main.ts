@@ -56,7 +56,8 @@ const program = Effect.gen(function* () {
 			),
 		)
 		.join("")
-	console.log(
+
+	yield* Effect.log(
 		JSON.stringify(
 			{
 				model: response.model,

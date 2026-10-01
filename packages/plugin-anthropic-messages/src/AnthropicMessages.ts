@@ -11,8 +11,8 @@ import {
 	Struct,
 	Tuple,
 } from "effect"
-import { Sse } from "effect/unstable/encoding"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { Sse } from "effect/encoding"
+import { HttpClient, HttpClientRequest } from "effect/http"
 import { ProviderError } from "@better-router/core/Deployment"
 import type { Deployment, GenerationExecutor } from "@better-router/core/Deployment"
 import type { ProtocolResponse, SelectedRequest } from "@better-router/core/Pipeline"

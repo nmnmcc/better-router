@@ -1,8 +1,17 @@
 import { Effect, Stream } from "effect"
 import type { Scope } from "effect"
 import { describe, expect, it } from "tstyche"
-import { Catalog, Execution, Lifecycle, Projection, Router, Runtime } from "@better-router/core"
+import {
+	Catalog,
+	EffectAI,
+	Execution,
+	Lifecycle,
+	Projection,
+	Router,
+	Runtime,
+} from "@better-router/core"
 import type { Deployment, Identifier, Plugin, Routing } from "@better-router/core"
+import { LanguageModel, Model } from "effect/ai"
 import type {
 	GenerationEvent,
 	GenerationRequest,
@@ -222,5 +231,22 @@ describe("core constructor modules", () => {
 		Projection.makeRuntime
 		// @ts-expect-error Property 'makeLifecycle' does not exist
 		Execution.makeLifecycle
+	})
+})
+
+describe("Effect AI model layer", () => {
+	it("preserves the model alias and requires RouterRuntime", () => {
+		const model = EffectAI.model("public-model")
+		expect(model).type.toBe<
+			Model.Model<"better-router", LanguageModel.LanguageModel, Router.RouterRuntime>
+		>()
+		expect(model.provider).type.toBe<"better-router">()
+
+		const languageModel = Effect.gen(function* () {
+			return yield* LanguageModel.LanguageModel
+		}).pipe(Effect.provide(model))
+		expect(languageModel).type.toBe<
+			Effect.Effect<LanguageModel.LanguageModel, never, Router.RouterRuntime>
+		>()
 	})
 })

@@ -1,5 +1,5 @@
 import { Context, HashMap, HashSet, Layer, Result } from "effect"
-import { HttpApi } from "effect/unstable/httpapi"
+import { HttpApi } from "effect/http-api"
 import { generation } from "./Capability.js"
 import type { Capability } from "./Capability.js"
 import type { Deployment, DeploymentId } from "./Deployment.js"

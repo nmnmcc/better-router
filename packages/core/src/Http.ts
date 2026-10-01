@@ -1,6 +1,6 @@
 import type { FileSystem, Layer, Path } from "effect"
-import type { Etag, HttpPlatform, HttpRouter } from "effect/unstable/http"
-import type { HttpApi } from "effect/unstable/httpapi"
+import type { Etag, HttpPlatform, HttpRouter } from "effect/http"
+import type { HttpApi } from "effect/http-api"
 import type { Router } from "./Router.js"
 
 /** Services supplied by the host when serving Effect HTTP routes. */
