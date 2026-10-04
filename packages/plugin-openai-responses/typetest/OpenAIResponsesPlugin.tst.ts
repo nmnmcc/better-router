@@ -94,6 +94,7 @@ describe("OpenAI Responses object plugin", () => {
 			readonly string[] | undefined
 		>()
 		expect<NonNullable<ModelRouteConfig["access"]>["allow"]>().type.toBe<readonly string[]>()
+		expect<Options["gatewayKey"]>().type.toBe<Redacted.Redacted<string> | undefined>()
 		expect<Options["deployments"]>().type.toBe<readonly ResponsesDeployment[] | undefined>()
 		expect<Options["modelRoutes"]>().type.toBe<readonly ModelRouteConfig[] | undefined>()
 		expect(configured.config.deployments).type.not.toBeAssignableTo<ResponsesDeployment[]>()
@@ -143,12 +144,20 @@ describe("OpenAI Responses object plugin", () => {
 	it("rejects legacy runtime configuration and incompatible deployments", () => {
 		expect<keyof Options>().type.toBe<"gatewayKey" | "deployments" | "modelRoutes">()
 		expect<Options>().type.not.toHaveProperty("routes")
+		expect<Options>().type.not.toHaveProperty("apis")
+		expect<Options>().type.not.toHaveProperty("route")
+		expect<Options>().type.not.toHaveProperty("provider")
 		expect<Plugin>().type.not.toHaveProperty("state")
 		expect<Plugin>().type.not.toHaveProperty("layers")
 		expect<PluginConfig>().type.not.toHaveProperty("layers")
 		expect<PluginConfig>().type.not.toHaveProperty("providersLayers")
 		expect<PluginConfig>().type.not.toHaveProperty("routes")
+		expect<PluginConfig>().type.not.toHaveProperty("apis")
+		expect<PluginConfig>().type.not.toHaveProperty("route")
+		expect<PluginConfig>().type.not.toHaveProperty("provider")
 
+		// @ts-expect-error! Gateway credentials must be Redacted values.
+		plugin({ gatewayKey: "plain-secret" })
 		// @ts-expect-error! The removed provider option is not part of static plugin configuration.
 		plugin({ provider: {} })
 		// @ts-expect-error! Model route declarations use modelRoutes; the routes alias was removed.
