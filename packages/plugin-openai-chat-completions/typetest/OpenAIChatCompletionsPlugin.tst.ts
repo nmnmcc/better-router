@@ -47,7 +47,7 @@ const deployment = {
 
 const backup = { ...deployment, id: "chat-backup" } as const satisfies ChatDeployment
 
-const routes = [
+const modelRoutes = [
 	{
 		id: "chat-route",
 		model: "public-model",
@@ -65,7 +65,7 @@ describe("OpenAI Chat Completions object plugin", () => {
 		const configured = plugin({
 			gatewayKey: Redacted.make("gateway-fixture"),
 			deployments: [deployment, backup],
-			routes,
+			modelRoutes,
 		})
 
 		expect(configured).type.toBe<Plugin>()
@@ -76,9 +76,9 @@ describe("OpenAI Chat Completions object plugin", () => {
 		expect(configured.config.deployments[0].pricing).type.toBe<Pricing | undefined>()
 		expect(configured.config.deployments[0].limits).type.toBe<DeploymentLimits | undefined>()
 		expect(configured.config.deployments[0].tags).type.toBe<readonly string[] | undefined>()
-		expect(configured.config.routes).type.toBe<readonly ModelRouteConfig[]>()
-		expect(configured.config.routes[0].deployments).type.toBe<readonly string[]>()
-		expect(configured.config.routes[0].fallback).type.toBe<readonly string[] | undefined>()
+		expect(configured.config.modelRoutes).type.toBe<readonly ModelRouteConfig[]>()
+		expect(configured.config.modelRoutes[0].deployments).type.toBe<readonly string[]>()
+		expect(configured.config.modelRoutes[0].fallback).type.toBe<readonly string[] | undefined>()
 
 		expect<WritableKeys<Options>>().type.toBe<never>()
 		expect<WritableKeys<Plugin>>().type.toBe<never>()
@@ -95,14 +95,14 @@ describe("OpenAI Chat Completions object plugin", () => {
 		>()
 		expect<NonNullable<ModelRouteConfig["access"]>["allow"]>().type.toBe<readonly string[]>()
 		expect<Options["deployments"]>().type.toBe<readonly ChatDeployment[] | undefined>()
-		expect<Options["routes"]>().type.toBe<readonly ModelRouteConfig[] | undefined>()
+		expect<Options["modelRoutes"]>().type.toBe<readonly ModelRouteConfig[] | undefined>()
 		expect(configured.config.deployments).type.not.toBeAssignableTo<ChatDeployment[]>()
-		expect(configured.config.routes).type.not.toBeAssignableTo<ModelRouteConfig[]>()
+		expect(configured.config.modelRoutes).type.not.toBeAssignableTo<ModelRouteConfig[]>()
 	})
 
 	it("keeps credential and HTTP client requirements visible at startup", () => {
 		const declared = Router.make({
-			plugins: [plugin({ deployments: [deployment, backup], routes })] as const,
+			plugins: [plugin({ deployments: [deployment, backup], modelRoutes })] as const,
 		})
 		type Declared = Result.Result.Success<typeof declared>
 		type Bound = ReturnType<typeof Router.layer<Declared["plugins"]>>
@@ -144,14 +144,18 @@ describe("OpenAI Chat Completions object plugin", () => {
 	})
 
 	it("rejects legacy runtime configuration and incompatible deployments", () => {
-		expect<keyof Options>().type.toBe<"gatewayKey" | "deployments" | "routes">()
+		expect<keyof Options>().type.toBe<"gatewayKey" | "deployments" | "modelRoutes">()
+		expect<Options>().type.not.toHaveProperty("routes")
 		expect<Plugin>().type.not.toHaveProperty("state")
 		expect<Plugin>().type.not.toHaveProperty("layers")
 		expect<PluginConfig>().type.not.toHaveProperty("layers")
 		expect<PluginConfig>().type.not.toHaveProperty("providersLayers")
+		expect<PluginConfig>().type.not.toHaveProperty("routes")
 
 		// @ts-expect-error! The removed provider option is not part of static plugin configuration.
 		plugin({ provider: {} })
+		// @ts-expect-error! Model route declarations use modelRoutes; the routes alias was removed.
+		plugin({ routes: modelRoutes })
 		// @ts-expect-error! Chat deployments cannot select the Responses protocol.
 		plugin({ deployments: [{ ...deployment, protocol: "responses" }] })
 		// @ts-expect-error! Chat deployments require the OpenAI provider.
