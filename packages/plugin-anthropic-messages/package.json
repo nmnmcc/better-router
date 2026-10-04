@@ -1,0 +1,34 @@
+{
+	"name": "@better-router/plugin-anthropic-messages",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		"./package.json": "./package.json",
+		".": {
+			"types": "./dist/index.d.mts",
+			"default": "./dist/index.mjs"
+		},
+		"./*": {
+			"types": "./dist/*.d.mts",
+			"default": "./dist/*.mjs"
+		},
+		"./index": null
+	},
+	"scripts": {
+		"build": "yarn --cwd ../.. tsdown -F plugin-anthropic-messages",
+		"check": "tsc -b --pretty false"
+	},
+	"dependencies": {
+		"@better-router/core": "workspace:*",
+		"@better-router/protocol-anthropic-messages": "workspace:*",
+		"@better-router/provider-anthropic": "workspace:*"
+	},
+	"peerDependencies": {
+		"effect": "4.0.0"
+	},
+	"devDependencies": {
+		"effect": "4.0.0"
+	}
+}

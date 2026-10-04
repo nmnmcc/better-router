@@ -1,4 +1,6 @@
 import { Context, Effect, Layer, Schema, Stream } from "effect"
+import * as Capability from "./Capability.js"
+import * as RouterPlugin from "./Plugin.js"
 import type { GenerationRequest } from "./Generation.js"
 import type { Process } from "./GenerationProcess.js"
 import { Request as GenerationRequestSchema } from "./GenerationSchema.js"
@@ -132,6 +134,30 @@ export const layer = <const Handlers extends Readonly<Record<string, AnyHandler>
 			} satisfies Service
 		}),
 	) as Layer.Layer<Route, never, HandlerRequirements<Handlers>>
+
+/** Stable routing capability; handler maps are supplied as plugin state. */
+export const capability = Capability.make({
+	id: "routing.models",
+	version: 1,
+	kind: "routing",
+	projections: ["generation"],
+} as const)
+
+/** Turn a route declaration into a Better Auth-style object plugin. */
+export const plugin = <const Handlers extends Readonly<Record<string, AnyHandler>>>(
+	handlers: Handlers & KeyedHandlers<Handlers>,
+): RouterPlugin.RouterPlugin<
+	"model-routes",
+	readonly [typeof capability],
+	{ readonly route: Layer.Layer<Route, never, HandlerRequirements<Handlers>> }
+> =>
+	RouterPlugin.make({
+		id: "model-routes",
+		capabilities: [capability] as const,
+		state: { route: layer<Handlers>(handlers) },
+	})
+
+export const makePlugin = plugin
 
 /** Access the route service inside another Effect program. */
 export const generate = (

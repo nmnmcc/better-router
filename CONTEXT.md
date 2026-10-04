@@ -10,6 +10,21 @@ contracts, while in-process callers use the same Route service directly.
 A live, cancellable generation with semantic events and one terminal response.
 It is represented by `Generation.Process`.
 
+**Capability**:
+A stable, stateless feature identity with a version and semantic projections.
+Credentials, Layers, model names and endpoint options are state, not
+capabilities.
+
+**Plugin**:
+A Better Auth-style object containing an id, capability declarations and
+optional state configuration. Plugins are supplied explicitly to
+`Router.make({ plugins })`.
+
+**State**:
+Runtime configuration contributed by a plugin: route/provider Layers, HTTP
+contracts and other resources. State is acquired after declarations have been
+validated.
+
 **Route**:
 The core Context service that maps a public model alias to a handler. A handler
 chooses provider services and owns retry, health, and stopping policy.
@@ -28,12 +43,12 @@ A pure projection between a protocol wire value and core Route/Generation
 values. It returns `Result` and preserves Schema field paths.
 
 **Router**:
-The composition entry point. It provides provider Layers to Route, injects
-Route into protocol Api Layers, and combines HTTP contracts. It does not own a
-provider registry or routing algorithm.
+The composition entry point. It validates the plugin declarations, provides
+their state Layers to Route, injects Route into protocol Api Layers, and
+combines HTTP contracts. Its immutable `registry` is available for inspection.
 
 **Public model alias**:
-The model name used by a caller and the key in `Route.layer({...})`.
+The model name used by a caller and the key in `Route.plugin({...})`.
 
 **Provider model**:
 The upstream model identifier held privately by a provider Layer.
@@ -50,8 +65,8 @@ It is an implementation detail of that provider, not a protocol ingress.
 
 - Protocol packages depend on core and never on provider packages.
 - Provider packages depend on core and never on protocol packages.
-- Core does not define a general provider registry, Deployment, Capability, or
-  native opaque execution path for the new API.
+- Core keeps capability declarations and state configuration separate; the
+  immutable plugin registry is the only composition source of truth.
 - All untrusted boundaries are decoded with Schema before semantic projection.
 - Pure conversion uses `Result`; I/O and lifecycle use `Effect` and `Stream`.
 - A stream cannot be replayed after it has emitted semantic output.

@@ -8,6 +8,8 @@ import {
 	Response as ResponseSchema,
 } from "@better-router/core/GenerationSchema"
 import { Error as ProviderError } from "@better-router/core/Provider"
+import * as Capability from "@better-router/core/Capability"
+import * as RouterPlugin from "@better-router/core/Plugin"
 
 export interface Config {
 	readonly model: string
@@ -232,3 +234,29 @@ export const make = (config: unknown): Result.Result<Config, ConfigError> =>
 		Result.mapError((cause) => ConfigError.make({ message: cause.message })),
 		Result.flatMap(validateConfig),
 	)
+
+/** Stable provider capability; credentials and model selection belong to state. */
+export const capability = Capability.make({
+	id: "provider.openai.responses",
+	version: 1,
+	kind: "provider",
+	projections: ["generation"],
+} as const)
+
+type PluginState = { readonly providers: readonly [ReturnType<typeof layer>] }
+
+export type Plugin = RouterPlugin.RouterPlugin<
+	"openai-responses-provider",
+	readonly [typeof capability],
+	PluginState
+>
+
+/** Better Auth-style provider plugin. Configuration is captured only in state. */
+export const plugin = (config: unknown): Plugin =>
+	RouterPlugin.make({
+		id: "openai-responses-provider",
+		capabilities: [capability] as const,
+		state: { providers: [layer(config)] as const },
+	})
+
+export const makePlugin = plugin

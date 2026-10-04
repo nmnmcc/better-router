@@ -1,4 +1,5 @@
 import { Layer } from "effect"
+import { Capability, Plugin as RouterPlugin } from "@better-router/core"
 import { Route } from "@better-router/core/Route"
 import type { Contract } from "@better-router/core/Api"
 import * as ApiModule from "./Api.js"
@@ -17,3 +18,29 @@ export const makeContract = (options: HttpModule.Options = {}): Contract<typeof 
 })
 
 export const contract = makeContract()
+
+/** Stable ingress capability; gateway keys belong to plugin state. */
+export const capability = Capability.make({
+	id: "protocol.openai.responses",
+	version: 1,
+	kind: "protocol",
+	projections: ["generation"],
+} as const)
+
+type PluginState = { readonly apis: readonly [Contract<typeof ApiModule.api>] }
+
+export type Plugin = RouterPlugin.RouterPlugin<
+	"openai-responses",
+	readonly [typeof capability],
+	PluginState
+>
+
+/** Better Auth-style object plugin for the Responses ingress. */
+export const plugin = (options: HttpModule.Options = {}): Plugin =>
+	RouterPlugin.make({
+		id: "openai-responses",
+		capabilities: [capability] as const,
+		state: { apis: [makeContract(options)] as const },
+	})
+
+export const makePlugin = plugin

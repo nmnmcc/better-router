@@ -31,18 +31,18 @@ const settings = Config.all({
 const server = Layer.unwrap(
 	Effect.gen(function* () {
 		const config = yield* settings
-		const openAI = OpenAIResponses.layer({
+		const openAI = OpenAIResponses.plugin({
 			model: config.openAIModel,
 			apiKey: config.openAIKey,
 			url: config.openAIUrl,
 		})
-		const anthropic = AnthropicMessages.layer({
+		const anthropic = AnthropicMessages.plugin({
 			model: config.anthropicModel,
 			apiKey: config.anthropicKey,
 			url: config.anthropicUrl,
 			defaultMaxTokens: config.anthropicMaxTokens,
 		})
-		const route = Route.layer({
+		const route = Route.plugin({
 			[config.publicModel]: (request: Route.Request) =>
 				Effect.gen(function* () {
 					const primary = yield* OpenAIResponses.OpenAIResponses
@@ -56,12 +56,13 @@ const server = Layer.unwrap(
 				}),
 		})
 		const router = yield* Router.make({
-			route,
-			providers: [openAI, anthropic],
-			apis: [
-				ChatCompletions.makeContract({ gatewayKey: config.gatewayKey }),
-				Anthropic.makeContract({ gatewayKey: config.gatewayKey }),
-			],
+			plugins: [
+				route,
+				openAI,
+				anthropic,
+				ChatCompletions.plugin({ gatewayKey: config.gatewayKey }),
+				Anthropic.plugin({ gatewayKey: config.gatewayKey }),
+			] as const,
 		})
 		return HttpRouter.serve(router.http.routes).pipe(
 			Layer.provide(

@@ -4,6 +4,10 @@ Better Router is an Effect based model router. It gives every protocol the same
 semantic generation contract while keeping provider credentials, HTTP wire
 formats, and routing policy at their owning boundaries.
 
+Configuration follows the Better Auth plugin pattern: a plugin declares stable
+capabilities and carries its runtime state separately. `Router.make` validates
+the complete plugin tuple before acquiring any provider or HTTP resource.
+
 The dependency direction is deliberately small:
 
 ```text
@@ -16,15 +20,18 @@ process; a protocol consumes its events.
 
 ## Packages
 
-| Package                                           | Responsibility                                                                                                                  |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `@better-router/core`                             | `Generation`, `Route`, provider error contracts, pure `Convert`, protocol `Api` contracts, and the Layer-only `Router` composer |
-| `@better-router/provider-openai`                  | `OpenAIResponses` and `OpenAIChatCompletions` Context services and upstream Layers                                              |
-| `@better-router/provider-anthropic`               | `AnthropicMessages` Context service and upstream Layer                                                                          |
-| `@better-router/protocol-openai-responses`        | Responses `HttpApi`, wire Schemas, conversions, and HTTP handler Layer                                                          |
-| `@better-router/protocol-openai-chat-completions` | Chat Completions `HttpApi`, wire Schemas, conversions, and HTTP handler Layer                                                   |
-| `@better-router/protocol-anthropic-messages`      | Messages `HttpApi`, wire Schemas, conversions, and HTTP handler Layer                                                           |
-| `@better-router/effect-ai`                        | Effect AI `LanguageModel` Layer backed directly by `Route`                                                                      |
+| Package                                           | Responsibility                                                                                                                     |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `@better-router/core`                             | `Capability`, `State`, object `Plugin`, immutable `Registry`, `Generation`, `Route`, provider errors, pure `Convert`, and `Router` |
+| `@better-router/provider-openai`                  | `OpenAIResponses` and `OpenAIChatCompletions` Context services and upstream Layers                                                 |
+| `@better-router/provider-anthropic`               | `AnthropicMessages` Context service and upstream Layer                                                                             |
+| `@better-router/protocol-openai-responses`        | Responses `HttpApi`, wire Schemas, conversions, and HTTP handler Layer                                                             |
+| `@better-router/protocol-openai-chat-completions` | Chat Completions `HttpApi`, wire Schemas, conversions, and HTTP handler Layer                                                      |
+| `@better-router/protocol-anthropic-messages`      | Messages `HttpApi`, wire Schemas, conversions, and HTTP handler Layer                                                              |
+| `@better-router/effect-ai`                        | Effect AI `LanguageModel` Layer backed directly by `Route`                                                                         |
+| `@better-router/plugin-openai-responses`          | Better Auth-style Responses ingress/provider plugin factory                                                                        |
+| `@better-router/plugin-openai-chat-completions`   | Better Auth-style Chat Completions ingress/provider plugin factory                                                                 |
+| `@better-router/plugin-anthropic-messages`        | Better Auth-style Anthropic Messages ingress/provider plugin factory                                                               |
 
 ## Quick start
 
@@ -45,8 +52,8 @@ import { Route, Router } from "@better-router/core"
 import { OpenAIResponses } from "@better-router/provider-openai"
 import * as ChatCompletions from "@better-router/protocol-openai-chat-completions"
 
-const provider = OpenAIResponses.layer({ model, apiKey, url })
-const route = Route.layer({
+const provider = OpenAIResponses.plugin({ model, apiKey, url })
+const route = Route.plugin({
 	chat: (request: Route.Request) =>
 		Effect.gen(function* () {
 			const openai = yield* OpenAIResponses.OpenAIResponses
@@ -56,24 +63,20 @@ const route = Route.layer({
 
 const program = Effect.gen(function* () {
 	return yield* Router.make({
-		route,
-		providers: [provider],
-		apis: [ChatCompletions.contract],
+		plugins: [route, provider, ChatCompletions.plugin()] as const,
 	})
 })
 ```
 
-`Router.make` and `Router.layer` only compose Layers. Protocol HTTP handlers
-depend on `Route`; they never select a provider directly. The host supplies its
+`Router.make` and `Router.layer` compose object plugin state. Protocol HTTP
+handlers depend on `Route`; they never select a provider directly. The host supplies its
 Effect HTTP server and client Layers, for example:
 
 ```ts
 const server = Layer.unwrap(
 	Effect.gen(function* () {
 		const router = yield* Router.make({
-			route,
-			providers: [provider],
-			apis: [ChatCompletions.contract],
+			plugins: [route, provider, ChatCompletions.plugin()] as const,
 		})
 		return HttpRouter.serve(router.http.routes).pipe(
 			Layer.provide(NodeHttpServer.layer(createServer)),
@@ -105,8 +108,7 @@ import { EffectAI } from "@better-router/effect-ai"
 const model = EffectAI.model("chat")
 const program = LanguageModel.generateText({ prompt: "Say hello" }).pipe(
 	Effect.provide(model),
-	Effect.provide(route),
-	Effect.provide(provider),
+	Effect.provide(router.route),
 )
 ```
 

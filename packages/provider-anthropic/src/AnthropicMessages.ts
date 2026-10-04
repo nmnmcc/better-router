@@ -10,6 +10,8 @@ import type {
 import * as Generation from "@better-router/core/Generation"
 import { Request as RequestSchema } from "@better-router/core/GenerationSchema"
 import { Error as ProviderError } from "@better-router/core/Provider"
+import * as Capability from "@better-router/core/Capability"
+import * as RouterPlugin from "@better-router/core/Plugin"
 import { fromNative } from "./GenerationAssembler.js"
 import type { NativeChunk } from "./GenerationAssembler.js"
 
@@ -547,6 +549,32 @@ export const layer = (
 			return { generate: (request: Request) => generate(client, parsed, request) }
 		}),
 	)
+
+/** Stable provider capability; credentials and model selection belong to state. */
+export const capability = Capability.make({
+	id: "provider.anthropic.messages",
+	version: 1,
+	kind: "provider",
+	projections: ["generation"],
+} as const)
+
+type PluginState = { readonly providers: readonly [ReturnType<typeof layer>] }
+
+export type Plugin = RouterPlugin.RouterPlugin<
+	"anthropic-messages-provider",
+	readonly [typeof capability],
+	PluginState
+>
+
+/** Better Auth-style provider plugin. */
+export const plugin = (config: unknown): Plugin =>
+	RouterPlugin.make({
+		id: "anthropic-messages-provider",
+		capabilities: [capability] as const,
+		state: { providers: [layer(config)] as const },
+	})
+
+export const makePlugin = plugin
 
 export const make = (config: unknown): Result.Result<Config, ConfigError> =>
 	Schema.decodeUnknownResult(ConfigSchema)(config).pipe(

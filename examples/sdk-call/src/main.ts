@@ -15,19 +15,19 @@ const settings = Config.all({
 
 const program = Effect.gen(function* () {
 	const config = yield* settings
-	const provider = OpenAIResponses.layer({
+	const provider = OpenAIResponses.plugin({
 		model: config.upstreamModel,
 		apiKey: config.apiKey,
 		url: config.url,
 	})
-	const route = Route.layer({
+	const route = Route.plugin({
 		[config.publicModel]: (request: Route.Request) =>
 			Effect.gen(function* () {
 				const openai = yield* OpenAIResponses.OpenAIResponses
 				return yield* openai.generate(request)
 			}),
 	})
-	const router = yield* Router.make({ route, providers: [provider] })
+	const router = yield* Router.make({ plugins: [route, provider] as const })
 	const process = yield* router.generate({
 		model: config.publicModel,
 		input: "Give me one practical tip for designing a model router.",

@@ -24,12 +24,12 @@ const settings = Config.all({
 const server = Layer.unwrap(
 	Effect.gen(function* () {
 		const config = yield* settings
-		const provider = OpenAIResponses.layer({
+		const provider = OpenAIResponses.plugin({
 			model: config.upstreamModel,
 			apiKey: config.apiKey,
 			url: config.url,
 		})
-		const route = Route.layer({
+		const route = Route.plugin({
 			[config.publicModel]: (request: Route.Request) =>
 				Effect.gen(function* () {
 					const openai = yield* OpenAIResponses.OpenAIResponses
@@ -37,12 +37,12 @@ const server = Layer.unwrap(
 				}),
 		})
 		const router = yield* Router.make({
-			route,
-			providers: [provider],
-			apis: [
-				ChatCompletions.makeContract({ gatewayKey: config.gatewayKey }),
-				Responses.makeContract({ gatewayKey: config.gatewayKey }),
-			],
+			plugins: [
+				route,
+				provider,
+				ChatCompletions.plugin({ gatewayKey: config.gatewayKey }),
+				Responses.plugin({ gatewayKey: config.gatewayKey }),
+			] as const,
 		})
 		return HttpRouter.serve(router.http.routes).pipe(
 			Layer.provide(

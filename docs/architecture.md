@@ -1,10 +1,10 @@
 # Architecture
 
-Better Router is organized around a semantic generation contract and small
-Effect Context services. The dependency direction is:
+Better Router is organized around a semantic generation contract and
+Better Auth-style object plugins. The dependency direction is:
 
 ```text
-Protocol Api → Convert → Route → Provider Context → Generation.Process
+Plugin declaration → Registry → Route → Provider Context → Generation.Process
 ```
 
 The arrows describe ownership. A protocol package owns its public HTTP
@@ -14,6 +14,31 @@ protocol handler asks `Route` for a process and does not know which provider is
 used.
 
 ## Core contracts
+
+`Capability` and `State` are deliberately different contracts. A capability is
+the stable, stateless identity of a feature (`id`, version, kind and semantic
+projections). State is process configuration: route Layers, provider Layers,
+HTTP contracts and credentials. A key or provider model can therefore change
+without changing the capability identity.
+
+`Plugin` is an explicit object, following the Better Auth plugin shape:
+
+```ts
+const plugin = {
+	id: "openai-responses",
+	capabilities: [Responses.capability, OpenAI.capability],
+	state: {
+		apis: [Responses.makeContract({ gatewayKey })],
+		providers: [OpenAI.layer(providerConfig)],
+	},
+}
+```
+
+`Router.make({ plugins })` receives the tuple directly. `Registry` reduces the
+declarations immutably, rejects duplicate plugin/capability IDs and HTTP
+routes, and only then starts plugin hooks or builds resource Layers. A plugin
+startup hook may acquire resources, but it cannot add a new declaration after
+construction.
 
 `Generation` contains the protocol-neutral request, event, and response model.
 Its `Process` namespace constructs a live process:
@@ -27,11 +52,12 @@ the lifecycle of one generation, not a static response or an opaque native
 execution object. A missing or duplicate terminal event becomes
 `Generation.ProcessError`.
 
-`Route` is the only routing Context service. `Route.layer` accepts a map whose
-keys are public model aliases:
+`Route` is the only routing Context service. `Route.plugin` accepts a map whose
+keys are public model aliases and stores the resulting route Layer in plugin
+state:
 
 ```ts
-Route.layer({
+Route.plugin({
 	chat: (request) => openai.generate(request),
 	reliable: (request) =>
 		primary.generate(request).pipe(
@@ -50,10 +76,10 @@ Route errors. The public model alias is the map key. Provider model identifiers
 remain inside provider Layers.
 
 `Provider.Error` is the small normalized failure vocabulary shared by concrete
-provider packages. Core does not register providers, deployments, capabilities,
-or provider models. Each provider package exposes its own Context service and a
+provider packages. Each provider package exposes its own Context service and a
 Layer that decodes configuration, obtains an `HttpClient`, and owns upstream
-resources.
+resources. The provider Layer is state supplied by a plugin; the provider
+capability remains independent of that state.
 
 `Api.Contract` is the only API combination type in core. A protocol package
 exports its own `HttpApi`, errors, wire Schemas, conversions, and handler Layer,
@@ -98,16 +124,14 @@ semantic event and clean source completion.
 
 ## Composition and hosts
 
-`Router.make({ route, providers, apis })` builds an in-process composed router.
-The effect must run with the services required by the supplied provider Layers
+`Router.make({ plugins })` builds an in-process composed router. A route may be
+declared as `Route.plugin(handlers)` or supplied directly for compatibility.
+The effect must run with the services required by the supplied state Layers
 (for example, provide `NodeHttpClient.layerUndici` at this composition scope).
 `Router.layer` exposes the same composition as a Layer for a long-lived host.
-Both functions only merge provider Layers, provide those Layers to the route,
-inject Route into protocol handlers, and combine the `HttpApi` fragments.
-`Router` is the composition seam. It builds the Route Layer with the supplied
-provider Layers, injects Route into each protocol handler Layer, and combines
-the protocol `HttpApi` contracts. It has no registration, execution, or
-projection algorithm of its own.
+The composer provides plugin provider Layers to the route, injects Route into
+plugin HTTP handlers, and combines their `HttpApi` contracts. The resulting
+router exposes its immutable `registry` for inspection and host integration.
 
 The host supplies `HttpRouter.serve`, `NodeHttpServer`, `NodeHttpClient`, and
 the serving Scope. No loopback request is needed for SDK or Effect AI usage.

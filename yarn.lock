@@ -112,6 +112,45 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@better-router/plugin-anthropic-messages@workspace:packages/plugin-anthropic-messages":
+  version: 0.0.0-use.local
+  resolution: "@better-router/plugin-anthropic-messages@workspace:packages/plugin-anthropic-messages"
+  dependencies:
+    "@better-router/core": "workspace:*"
+    "@better-router/protocol-anthropic-messages": "workspace:*"
+    "@better-router/provider-anthropic": "workspace:*"
+    effect: "npm:4.0.0"
+  peerDependencies:
+    effect: 4.0.0
+  languageName: unknown
+  linkType: soft
+
+"@better-router/plugin-openai-chat-completions@workspace:packages/plugin-openai-chat-completions":
+  version: 0.0.0-use.local
+  resolution: "@better-router/plugin-openai-chat-completions@workspace:packages/plugin-openai-chat-completions"
+  dependencies:
+    "@better-router/core": "workspace:*"
+    "@better-router/protocol-openai-chat-completions": "workspace:*"
+    "@better-router/provider-openai": "workspace:*"
+    effect: "npm:4.0.0"
+  peerDependencies:
+    effect: 4.0.0
+  languageName: unknown
+  linkType: soft
+
+"@better-router/plugin-openai-responses@workspace:packages/plugin-openai-responses":
+  version: 0.0.0-use.local
+  resolution: "@better-router/plugin-openai-responses@workspace:packages/plugin-openai-responses"
+  dependencies:
+    "@better-router/core": "workspace:*"
+    "@better-router/protocol-openai-responses": "workspace:*"
+    "@better-router/provider-openai": "workspace:*"
+    effect: "npm:4.0.0"
+  peerDependencies:
+    effect: 4.0.0
+  languageName: unknown
+  linkType: soft
+
 "@better-router/protocol-anthropic-messages@workspace:*, @better-router/protocol-anthropic-messages@workspace:packages/protocol-anthropic-messages":
   version: 0.0.0-use.local
   resolution: "@better-router/protocol-anthropic-messages@workspace:packages/protocol-anthropic-messages"

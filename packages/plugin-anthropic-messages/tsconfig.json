@@ -1,0 +1,13 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"rootDir": "src",
+		"outDir": ".types"
+	},
+	"include": ["src/**/*.ts"],
+	"references": [
+		{ "path": "../core" },
+		{ "path": "../protocol-anthropic-messages" },
+		{ "path": "../provider-anthropic" }
+	]
+}
