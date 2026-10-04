@@ -42,12 +42,12 @@ it("composes immutable Chat Completions declarations into a registry", () => {
 				credentialRef: "secret.openai",
 			},
 		],
-		routes: [{ model: "public", deployments: ["chat-primary"] }],
+		modelRoutes: [{ model: "public", deployments: ["chat-primary"] }],
 	})
 	const result = Registry.fromPlugins([value])
 	assert.equal(Result.isSuccess(result), true)
 	if (Result.isFailure(result)) return
 	assert.equal(result.success.providerContracts[0]?.id, Provider.Deployment.contract.id)
 	assert.equal(HashMap.has(result.success.deploymentIndex, "chat-primary"), true)
-	assert.equal(HashMap.has(result.success.routeIndex, "public"), true)
+	assert.equal(HashMap.has(result.success.modelRouteIndex, "public"), true)
 })

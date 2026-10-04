@@ -61,7 +61,7 @@ it.effect("retains Anthropic deployment defaults when composing its runtime", ()
 								version: "2023-06-01",
 							},
 						],
-						routes: [{ model: "public", deployments: ["anthropic-primary"] }],
+						modelRoutes: [{ model: "public", deployments: ["anthropic-primary"] }],
 					}),
 				] as const,
 			}),

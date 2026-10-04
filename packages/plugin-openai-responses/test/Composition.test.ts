@@ -93,7 +93,7 @@ it.effect("keeps models and credentials independent for multiple OpenAI deployme
 								credentialRef: "second-key",
 							},
 						],
-						routes: [
+						modelRoutes: [
 							{ model: "public-first", deployments: ["first"] },
 							{ model: "public-second", deployments: ["second"] },
 						],

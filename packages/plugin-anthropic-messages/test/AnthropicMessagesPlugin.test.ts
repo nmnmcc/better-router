@@ -50,12 +50,12 @@ it("composes immutable Messages declarations into a registry", () => {
 				credentialRef: "secret.anthropic",
 			},
 		],
-		routes: [{ model: "public", deployments: ["anthropic-primary"] }],
+		modelRoutes: [{ model: "public", deployments: ["anthropic-primary"] }],
 	})
 	const result = Registry.fromPlugins([value])
 	assert.equal(Result.isSuccess(result), true)
 	if (Result.isFailure(result)) return
 	assert.equal(result.success.providerContracts[0]?.id, Provider.Deployment.contract.id)
 	assert.equal(HashMap.has(result.success.deploymentIndex, "anthropic-primary"), true)
-	assert.equal(HashMap.has(result.success.routeIndex, "public"), true)
+	assert.equal(HashMap.has(result.success.modelRouteIndex, "public"), true)
 })

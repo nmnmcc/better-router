@@ -17,7 +17,7 @@ export interface Options {
 	/** Static deployments keep model and credential references separate from capability. */
 	readonly deployments?: readonly ChatDeployment[]
 	/** Public aliases and ordered fallback candidates for these deployments. */
-	readonly routes?: readonly ModelRouteConfig[]
+	readonly modelRoutes?: readonly ModelRouteConfig[]
 }
 
 export interface PluginConfig {
@@ -25,7 +25,7 @@ export interface PluginConfig {
 	readonly projections: readonly [typeof Protocol.projection]
 	readonly providers: readonly [typeof Provider.Deployment.contract]
 	readonly deployments: readonly ChatDeployment[]
-	readonly routes: readonly ModelRouteConfig[]
+	readonly modelRoutes: readonly ModelRouteConfig[]
 }
 
 export interface Plugin {
@@ -47,7 +47,7 @@ export const plugin = (options: Options = {}): Plugin =>
 			projections: [Protocol.projection] as const,
 			providers: [Provider.Deployment.contract] as const,
 			deployments: options.deployments?.map((deployment) => ({ ...deployment })) ?? [],
-			routes: options.routes ?? [],
+			modelRoutes: options.modelRoutes ?? [],
 		},
 	}) satisfies RouterPlugin.RouterPlugin<Plugin["id"], Plugin["capabilities"], PluginConfig>
 

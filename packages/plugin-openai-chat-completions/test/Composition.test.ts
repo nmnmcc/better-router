@@ -52,7 +52,7 @@ it.effect("binds a Chat Completions plugin to its deployment without singleton s
 								baseUrl: "https://upstream.example/v1/chat/completions",
 							},
 						],
-						routes: [{ model: "public", deployments: ["chat-primary"] }],
+						modelRoutes: [{ model: "public", deployments: ["chat-primary"] }],
 					}),
 				] as const,
 			}),
