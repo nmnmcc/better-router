@@ -2,8 +2,5 @@
 	"extends": "../../tsconfig.base.json",
 	"compilerOptions": { "types": ["node"] },
 	"include": ["src"],
-	"references": [
-		{ "path": "../../packages/core" },
-		{ "path": "../../packages/plugin-openai-responses" }
-	]
+	"references": [{ "path": "../../packages/core" }, { "path": "../../packages/provider-openai" }]
 }

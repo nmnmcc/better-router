@@ -1,85 +1,128 @@
 # Better Router
 
-> Build your own AI router.
+Better Router is an Effect based model router. It gives every protocol the same
+semantic generation contract while keeping provider credentials, HTTP wire
+formats, and routing policy at their owning boundaries.
 
-Better Router is an Effect-based TypeScript toolkit for routing AI requests across providers. Configure model aliases, deployments, and fallback routes once, then use the same router through an HTTP API or an in-process call.
+The dependency direction is deliberately small:
 
-## What you get
+```text
+protocol Api → Convert → Route → provider Context → Generation.Process
+```
 
-- One semantic generation contract across providers
-- Declarative plugins for OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages
-- Ordered fallback before output starts
-- Streaming, authentication, middleware, and cancellation
-- Type-safe router composition with `Router.make` or `Router.layer`
+`Generation.Process` represents one live generation. It exposes a semantic
+event stream, a terminal response view, and cancellation. A provider creates a
+process; a protocol consumes its events.
 
 ## Packages
 
-| Package                                         | Provides                                                                             |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `@better-router/core`                           | Routing, deployments, generation, middleware, HTTP composition, and plugin contracts |
-| `@better-router/plugin-openai-chat-completions` | OpenAI Chat Completions ingress and upstream execution                               |
-| `@better-router/plugin-openai-responses`        | OpenAI Responses ingress and upstream execution                                      |
-| `@better-router/plugin-anthropic-messages`      | Anthropic Messages ingress and upstream execution                                    |
+| Package                                           | Responsibility                                                                                                                  |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `@better-router/core`                             | `Generation`, `Route`, provider error contracts, pure `Convert`, protocol `Api` contracts, and the Layer-only `Router` composer |
+| `@better-router/provider-openai`                  | `OpenAIResponses` and `OpenAIChatCompletions` Context services and upstream Layers                                              |
+| `@better-router/provider-anthropic`               | `AnthropicMessages` Context service and upstream Layer                                                                          |
+| `@better-router/protocol-openai-responses`        | Responses `HttpApi`, wire Schemas, conversions, and HTTP handler Layer                                                          |
+| `@better-router/protocol-openai-chat-completions` | Chat Completions `HttpApi`, wire Schemas, conversions, and HTTP handler Layer                                                   |
+| `@better-router/protocol-anthropic-messages`      | Messages `HttpApi`, wire Schemas, conversions, and HTTP handler Layer                                                           |
+| `@better-router/effect-ai`                        | Effect AI `LanguageModel` Layer backed directly by `Route`                                                                      |
 
 ## Quick start
 
-Install dependencies and build the workspace:
+Install and build the workspace:
 
 ```sh
 devenv shell -- yarn install --immutable
 devenv shell -- yarn build
 ```
 
-Start the [quickstart example](examples/quickstart/README.md) with your provider and client keys:
+A route is a map from public model aliases to handlers. A handler selects and
+combines provider services, so failover and health policy stay local to the
+application's route:
+
+```ts
+import { Effect } from "effect"
+import { Route, Router } from "@better-router/core"
+import { OpenAIResponses } from "@better-router/provider-openai"
+import * as ChatCompletions from "@better-router/protocol-openai-chat-completions"
+
+const provider = OpenAIResponses.layer({ model, apiKey, url })
+const route = Route.layer({
+	chat: (request: Route.Request) =>
+		Effect.gen(function* () {
+			const openai = yield* OpenAIResponses.OpenAIResponses
+			return yield* openai.generate(request)
+		}),
+})
+
+const program = Effect.gen(function* () {
+	return yield* Router.make({
+		route,
+		providers: [provider],
+		apis: [ChatCompletions.contract],
+	})
+})
+```
+
+`Router.make` and `Router.layer` only compose Layers. Protocol HTTP handlers
+depend on `Route`; they never select a provider directly. The host supplies its
+Effect HTTP server and client Layers, for example:
+
+```ts
+const server = Layer.unwrap(
+	Effect.gen(function* () {
+		const router = yield* Router.make({
+			route,
+			providers: [provider],
+			apis: [ChatCompletions.contract],
+		})
+		return HttpRouter.serve(router.http.routes).pipe(
+			Layer.provide(NodeHttpServer.layer(createServer)),
+		)
+	}).pipe(Effect.provide(NodeHttpClient.layerUndici)),
+)
+```
+
+Run the complete quickstart example with provider and gateway credentials:
 
 ```sh
 GATEWAY_API_KEY=client OPENAI_API_KEY=provider OPENAI_MODEL=gpt-5-mini \
   devenv shell -- yarn workspace @better-router/example-quickstart start
 ```
 
-It exposes `POST /v1/chat/completions` at `http://127.0.0.1:8787`:
-
-```sh
-curl http://127.0.0.1:8787/v1/chat/completions \
-  -H 'Authorization: Bearer client' \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"quickstart","messages":[{"role":"user","content":"Hello"}]}'
-```
-
-See [all examples](examples/README.md) for cross-provider fallback and in-process SDK calls.
+It exposes `POST /v1/chat/completions` on `http://127.0.0.1:8787` using the
+public `quickstart` alias. See [all examples](examples/README.md) for
+cross-provider fallback and in-process calls.
 
 ## Effect AI
 
-`@better-router/core` can provide a Better Router alias as an Effect AI
-`LanguageModel`. The model Layer requires the existing `RouterRuntime`, so it
-can be composed with the same router used by HTTP adapters:
+The Effect AI adapter is a separate package and calls `Route` in process:
 
 ```ts
-import { Effect, Schema } from "effect"
+import { Effect } from "effect"
 import { LanguageModel } from "effect/ai"
-import { EffectAI } from "@better-router/core"
+import { EffectAI } from "@better-router/effect-ai"
 
-const program = LanguageModel.generateObject({
-	prompt: "Return a greeting",
-	objectName: "greeting",
-	schema: Schema.Struct({ message: Schema.String }),
-}).pipe(Effect.provide(EffectAI.model("public-model")), Effect.provide(routerLayer))
-
-// routerLayer provides RouterRuntime, for example from Router.layer(...).
+const model = EffectAI.model("chat")
+const program = LanguageModel.generateText({ prompt: "Say hello" }).pipe(
+	Effect.provide(model),
+	Effect.provide(route),
+	Effect.provide(provider),
+)
 ```
 
-The adapter supports text and structured generation, user-defined function
-tools, continuations, and streaming. Unsupported provider-specific prompt parts
-return typed `AiError` values.
+It maps portable prompts, tools, structured output, completion, and streaming
+to `Generation.Process`, preserving typed route and provider failures.
 
 ## Development
 
 ```sh
 devenv shell -- yarn check
 devenv shell -- yarn build
+devenv shell -- yarn generate:openresponses --check
 ```
 
-Read the [architecture](docs/architecture.md) for router and plugin contracts, [testing guide](docs/testing.md) for checks and test boundaries, and [project terminology](CONTEXT.md) for domain terms.
+Read [the architecture](docs/architecture.md), [the testing guide](docs/testing.md),
+and [project terminology](CONTEXT.md) for the contracts and boundaries.
 
 ## License
 

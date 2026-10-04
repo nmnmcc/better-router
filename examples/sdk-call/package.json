@@ -8,7 +8,7 @@
 	},
 	"dependencies": {
 		"@better-router/core": "workspace:*",
-		"@better-router/plugin-openai-responses": "workspace:*",
+		"@better-router/provider-openai": "workspace:*",
 		"@effect/platform-node": "4.0.0",
 		"effect": "4.0.0"
 	},

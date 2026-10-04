@@ -4,7 +4,8 @@
 	"include": ["src"],
 	"references": [
 		{ "path": "../../packages/core" },
-		{ "path": "../../packages/plugin-openai-chat-completions" },
-		{ "path": "../../packages/plugin-openai-responses" }
+		{ "path": "../../packages/provider-openai" },
+		{ "path": "../../packages/protocol-openai-chat-completions" },
+		{ "path": "../../packages/protocol-openai-responses" }
 	]
 }

@@ -1,7 +1,7 @@
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
-import { Execution, Router } from "@better-router/core"
-import { OpenAIResponses, OpenAIResponsesPlugin } from "@better-router/plugin-openai-responses"
+import { Route, Router } from "@better-router/core"
+import { OpenAIResponses } from "@better-router/provider-openai"
 import { Config, Effect, Match } from "effect"
 
 const settings = Config.all({
@@ -15,37 +15,24 @@ const settings = Config.all({
 
 const program = Effect.gen(function* () {
 	const config = yield* settings
-	const deployment = yield* Effect.fromResult(
-		OpenAIResponses.make({
-			id: "openai-sdk",
-			model: config.upstreamModel,
-			apiKey: config.apiKey,
-			url: config.url,
-		}),
-	)
-	const router = yield* Router.make({
-		plugins: [OpenAIResponsesPlugin.make({ deployments: [deployment] })] as const,
-	})({
-		routes: [{ model: config.publicModel, deployments: [deployment.id] }],
+	const provider = OpenAIResponses.layer({
+		model: config.upstreamModel,
+		apiKey: config.apiKey,
+		url: config.url,
 	})
-	const execution = yield* router.invoke({
-		type: "generation",
-		request: {
-			model: config.publicModel,
-			input: "Give me one practical tip for designing a model router.",
-		},
+	const route = Route.layer({
+		[config.publicModel]: (request: Route.Request) =>
+			Effect.gen(function* () {
+				const openai = yield* OpenAIResponses.OpenAIResponses
+				return yield* openai.generate(request)
+			}),
 	})
-	const response = yield* Match.value(execution).pipe(
-		Match.discriminatorsExhaustive("type")({
-			generation: (value) => Execution.complete(value.events),
-			opaque: () =>
-				Effect.fail(
-					Router.RouterError.cases.InvalidResponse.make({
-						message: "Expected a semantic generation execution",
-					}),
-				),
-		}),
-	)
+	const router = yield* Router.make({ route, providers: [provider] })
+	const process = yield* router.generate({
+		model: config.publicModel,
+		input: "Give me one practical tip for designing a model router.",
+	})
+	const response = yield* process.response.pipe(Effect.ensuring(process.cancel))
 	const text = response.output
 		.flatMap((item) =>
 			Match.value(item).pipe(

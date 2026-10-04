@@ -8,8 +8,11 @@
 	"include": ["*.ts", "../packages/*/typetest/**/*.tst.ts"],
 	"references": [
 		{ "path": "../packages/core" },
-		{ "path": "../packages/plugin-openai-chat-completions" },
-		{ "path": "../packages/plugin-openai-responses" },
-		{ "path": "../packages/plugin-anthropic-messages" }
+		{ "path": "../packages/provider-openai" },
+		{ "path": "../packages/provider-anthropic" },
+		{ "path": "../packages/protocol-openai-responses" },
+		{ "path": "../packages/protocol-openai-chat-completions" },
+		{ "path": "../packages/protocol-anthropic-messages" },
+		{ "path": "../packages/effect-ai" }
 	]
 }

@@ -531,3 +531,10 @@ export type GenerationEvent =
 			}
 	  })
 	| ExtensionEvent
+
+export type Request = GenerationRequest
+export type Response = GenerationResponse
+export type Event = GenerationEvent
+
+export { Process, ProcessError, complete } from "./GenerationProcess.js"
+export type { Process as GenerationProcess, ProcessFailure } from "./GenerationProcess.js"

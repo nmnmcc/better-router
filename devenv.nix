@@ -22,8 +22,8 @@
           "references/**"
           "yarn.lock"
           "devenv.lock"
-          "packages/plugin-openai-responses/src/generated/OpenResponses.ts"
-          "packages/plugin-openai-responses/src/generated/OpenResponsesSchema.json"
+          "packages/protocol-openai-responses/src/generated/OpenResponses.ts"
+          "packages/protocol-openai-responses/src/generated/OpenResponsesSchema.json"
         ];
       };
     };

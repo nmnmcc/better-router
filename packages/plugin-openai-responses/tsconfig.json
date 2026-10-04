@@ -1,5 +1,0 @@
-{
-	"extends": "../../tsconfig.base.json",
-	"include": ["src", "src/generated/OpenResponsesSchema.json"],
-	"references": [{ "path": "../core" }]
-}

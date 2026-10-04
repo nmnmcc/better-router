@@ -57,14 +57,26 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@better-router/effect-ai@workspace:packages/effect-ai":
+  version: 0.0.0-use.local
+  resolution: "@better-router/effect-ai@workspace:packages/effect-ai"
+  dependencies:
+    "@better-router/core": "workspace:*"
+    effect: "npm:4.0.0"
+  peerDependencies:
+    effect: 4.0.0
+  languageName: unknown
+  linkType: soft
+
 "@better-router/example-failover@workspace:examples/failover":
   version: 0.0.0-use.local
   resolution: "@better-router/example-failover@workspace:examples/failover"
   dependencies:
     "@better-router/core": "workspace:*"
-    "@better-router/plugin-anthropic-messages": "workspace:*"
-    "@better-router/plugin-openai-chat-completions": "workspace:*"
-    "@better-router/plugin-openai-responses": "workspace:*"
+    "@better-router/protocol-anthropic-messages": "workspace:*"
+    "@better-router/protocol-openai-chat-completions": "workspace:*"
+    "@better-router/provider-anthropic": "workspace:*"
+    "@better-router/provider-openai": "workspace:*"
     "@effect/platform-node": "npm:4.0.0"
     "@types/node": "npm:^24.0.0"
     effect: "npm:4.0.0"
@@ -77,8 +89,9 @@ __metadata:
   resolution: "@better-router/example-quickstart@workspace:examples/quickstart"
   dependencies:
     "@better-router/core": "workspace:*"
-    "@better-router/plugin-openai-chat-completions": "workspace:*"
-    "@better-router/plugin-openai-responses": "workspace:*"
+    "@better-router/protocol-openai-chat-completions": "workspace:*"
+    "@better-router/protocol-openai-responses": "workspace:*"
+    "@better-router/provider-openai": "workspace:*"
     "@effect/platform-node": "npm:4.0.0"
     "@types/node": "npm:^24.0.0"
     effect: "npm:4.0.0"
@@ -91,7 +104,7 @@ __metadata:
   resolution: "@better-router/example-sdk-call@workspace:examples/sdk-call"
   dependencies:
     "@better-router/core": "workspace:*"
-    "@better-router/plugin-openai-responses": "workspace:*"
+    "@better-router/provider-openai": "workspace:*"
     "@effect/platform-node": "npm:4.0.0"
     "@types/node": "npm:^24.0.0"
     effect: "npm:4.0.0"
@@ -99,9 +112,9 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@better-router/plugin-anthropic-messages@workspace:*, @better-router/plugin-anthropic-messages@workspace:packages/plugin-anthropic-messages":
+"@better-router/protocol-anthropic-messages@workspace:*, @better-router/protocol-anthropic-messages@workspace:packages/protocol-anthropic-messages":
   version: 0.0.0-use.local
-  resolution: "@better-router/plugin-anthropic-messages@workspace:packages/plugin-anthropic-messages"
+  resolution: "@better-router/protocol-anthropic-messages@workspace:packages/protocol-anthropic-messages"
   dependencies:
     "@better-router/core": "workspace:*"
     effect: "npm:4.0.0"
@@ -110,9 +123,9 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@better-router/plugin-openai-chat-completions@workspace:*, @better-router/plugin-openai-chat-completions@workspace:packages/plugin-openai-chat-completions":
+"@better-router/protocol-openai-chat-completions@workspace:*, @better-router/protocol-openai-chat-completions@workspace:packages/protocol-openai-chat-completions":
   version: 0.0.0-use.local
-  resolution: "@better-router/plugin-openai-chat-completions@workspace:packages/plugin-openai-chat-completions"
+  resolution: "@better-router/protocol-openai-chat-completions@workspace:packages/protocol-openai-chat-completions"
   dependencies:
     "@better-router/core": "workspace:*"
     effect: "npm:4.0.0"
@@ -121,9 +134,31 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@better-router/plugin-openai-responses@workspace:*, @better-router/plugin-openai-responses@workspace:packages/plugin-openai-responses":
+"@better-router/protocol-openai-responses@workspace:*, @better-router/protocol-openai-responses@workspace:packages/protocol-openai-responses":
   version: 0.0.0-use.local
-  resolution: "@better-router/plugin-openai-responses@workspace:packages/plugin-openai-responses"
+  resolution: "@better-router/protocol-openai-responses@workspace:packages/protocol-openai-responses"
+  dependencies:
+    "@better-router/core": "workspace:*"
+    effect: "npm:4.0.0"
+  peerDependencies:
+    effect: 4.0.0
+  languageName: unknown
+  linkType: soft
+
+"@better-router/provider-anthropic@workspace:*, @better-router/provider-anthropic@workspace:packages/provider-anthropic":
+  version: 0.0.0-use.local
+  resolution: "@better-router/provider-anthropic@workspace:packages/provider-anthropic"
+  dependencies:
+    "@better-router/core": "workspace:*"
+    effect: "npm:4.0.0"
+  peerDependencies:
+    effect: 4.0.0
+  languageName: unknown
+  linkType: soft
+
+"@better-router/provider-openai@workspace:*, @better-router/provider-openai@workspace:packages/provider-openai":
+  version: 0.0.0-use.local
+  resolution: "@better-router/provider-openai@workspace:packages/provider-openai"
   dependencies:
     "@better-router/core": "workspace:*"
     effect: "npm:4.0.0"

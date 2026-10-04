@@ -1,29 +1,58 @@
 # Better Router
 
-Better Router maps model requests to configured model deployments and can expose provider-compatible network endpoints from the same configuration.
+Better Router maps public model aliases to provider-backed generation
+processes. Protocol adapters expose those processes through compatible wire
+contracts, while in-process callers use the same Route service directly.
 
 ## Language
 
-**Plugin**:
-A named collection of related capabilities that can contribute model execution, routing behavior, or externally accessible endpoints.
-_Avoid_: Gateway plugin for the application as a whole
+**Generation process**:
+A live, cancellable generation with semantic events and one terminal response.
+It is represented by `Generation.Process`.
 
-**Model route**:
-A public model name and its eligible deployments in fallback order.
-_Avoid_: HTTP route, endpoint
+**Route**:
+The core Context service that maps a public model alias to a handler. A handler
+chooses provider services and owns retry, health, and stopping policy.
 
-**Deployment**:
-A configured target for a provider-native model, including the upstream communication modes it supports.
-_Avoid_: Plugin, public model name
+**Provider service**:
+A provider-owned Effect Context service such as `OpenAIResponses`,
+`OpenAIChatCompletions`, or `AnthropicMessages`. It accepts a provider request
+and returns a `Generation.Process`.
 
-**HTTP endpoint**:
-An externally accessible method and path with a request and response wire format.
-_Avoid_: Model route
+**Protocol Api**:
+The public wire contract for one protocol: its `HttpApi`, request/response
+Schemas, errors, conversion functions, and HTTP handler Layer.
 
-**Ingress**:
-The way a caller enters Better Router, such as an in-process SDK call or an HTTP or WebSocket connection.
-_Avoid_: Upstream transport
+**Convert**:
+A pure projection between a protocol wire value and core Route/Generation
+values. It returns `Result` and preserves Schema field paths.
+
+**Router**:
+The composition entry point. It provides provider Layers to Route, injects
+Route into protocol Api Layers, and combines HTTP contracts. It does not own a
+provider registry or routing algorithm.
+
+**Public model alias**:
+The model name used by a caller and the key in `Route.layer({...})`.
+
+**Provider model**:
+The upstream model identifier held privately by a provider Layer.
+
+**Protocol HTTP endpoint**:
+An externally accessible method and path with a protocol-specific request and
+response wire format.
 
 **Upstream transport**:
-The communication mode Better Router uses to invoke a deployment after routing.
-_Avoid_: Ingress
+The communication mode a concrete provider uses to invoke its upstream API.
+It is an implementation detail of that provider, not a protocol ingress.
+
+## Design rules
+
+- Protocol packages depend on core and never on provider packages.
+- Provider packages depend on core and never on protocol packages.
+- Core does not define a general provider registry, Deployment, Capability, or
+  native opaque execution path for the new API.
+- All untrusted boundaries are decoded with Schema before semantic projection.
+- Pure conversion uses `Result`; I/O and lifecycle use `Effect` and `Stream`.
+- A stream cannot be replayed after it has emitted semantic output.
+- `Generation.Process.cancel` is the owner-visible cancellation boundary.

@@ -1,59 +1,132 @@
 # Architecture
 
-The router uses Effect 4.0.0 end to end. Chat Completions, OpenAI Responses, and Anthropic Messages each contribute an ingress projection and provider pipelines. A plugin declaration is pure; `Router.layer` assembles its services and owns resources in the host Scope.
+Better Router is organized around a semantic generation contract and small
+Effect Context services. The dependency direction is:
 
-## Modules and IR
+```text
+Protocol Api → Convert → Route → Provider Context → Generation.Process
+```
 
-The flat workspace names plugins `plugin-{creator}-{protocol}` and exposes PascalCase modules directly from each package. Core owns `Capability`, `Catalog`, `Pipeline`, `Execution`, `EffectAI`, `Lifecycle`, `Generation`, `GenerationSchema`, `GenerationEvents`, `Projection`, `Runtime`, `Ingress`, `Registry`, `Services`, `Conversion`, `HttpJson`, `Deployment`, `Routing`, `Http`, `Plugin`, and `Router`. Each protocol package owns its wire decoder, protocol projection, HTTP endpoint and provider generation pipeline; protocol packages do not depend on each other. `GenerationEvents.fromNative` is a generation assembler, not a provider-specific execution hook.
+The arrows describe ownership. A protocol package owns its public HTTP
+contract and wire Schema. Its pure conversion functions project that wire
+shape into the core request and project semantic events back to the wire. The
+protocol handler asks `Route` for a process and does not know which provider is
+used.
 
-`GenerationRequest`, `GenerationEvent`, and `GenerationResponse` are the internal semantic generation contract. `GenerationSchema` is defined only from those domain values; it has no dependency on an HTTP specification. The OpenAI Responses plugin owns the generated wire types and pinned runtime schema. A plugin's `ProtocolDefinition` is the external bidirectional projection: it decodes its wire request into generation semantics and owns response encoding for its clients. Stateless event encoders validate or encode one event; protocols whose event wire format needs sequence-local state (Chat Completions and Messages) deliberately reject that operation and expose the stateful `encodeEvents` stream projector instead. A protocol command can therefore be routed through a direct opaque pipeline without first projecting, or fall back to the registered projection without carrying an ad-hoc conversion closure. `devenv shell -- yarn generate:openresponses --check` verifies the pinned Responses plugin artifacts; see [source notes](openresponses-research.md) for schema/prose differences.
+## Core contracts
 
-The types allow prefixed extension items, tools, and events. Extension payloads and provider-owned continuation IDs are not portable. A request with `previous_response_id` requires one deployment and only the Responses provider pipeline accepts it; other projections reject it. `DirectPipeline` is the native execution seam: it receives the selected private model and an immutable wire body, and returns a lazy opaque response stream. The pipeline is a declaration, not an imperative hook, so direct execution participates in the same routing, middleware, Scope and cancellation rules as semantic generation.
+`Generation` contains the protocol-neutral request, event, and response model.
+Its `Process` namespace constructs a live process:
 
-## Router lifecycle
+- `events` is a lazy semantic event stream;
+- `response`/`terminal` fold one subscription to exactly one terminal response;
+- `cancel` interrupts all views created from the process and is idempotent.
 
-`Router.make({ plugins })({ routes })` returns an `Effect` requiring `Scope` plus the plugins' declared services; the first stage fixes the plugin tuple so route references receive precise editor completions. `Router.layer({ plugins })({ routes })` lifts the same acquisition into a Layer for a long-lived `ManagedRuntime`. The immutable `Registry.Snapshot` is the single source of truth for capabilities, deployments, policies, middleware, direct pipelines, projections, model routes, and composed HTTP fragments; it is provided as the `Registry` Context service to plugin startup and HTTP Layers. Acquisition checks duplicate plugin, capability, deployment, pipeline, policy, middleware, projection and HTTP group identifiers before running any plugin `start` effects. Start effects acquire resources in declaration order; their finalizers belong to the router's Scope. A plugin cannot add capabilities after construction.
+Providers return `Generation.Process<ProviderError, R>`. A process is therefore
+the lifecycle of one generation, not a static response or an opaque native
+execution object. A missing or duplicate terminal event becomes
+`Generation.ProcessError`.
 
-Configuration identifiers use literal-preserving generic fields and the `Identifier` extraction helpers. The first `Router.make`/`Router.layer` stage infers deployment, policy, protocol, capability and middleware ID unions from the readonly plugin tuple; the second stage then checks route references and literal model aliases at the static composition seam without allowing routes to widen those unions. Values deliberately typed as `string` remain a dynamic configuration escape hatch: they are accepted without spelling-level checks, while `Registry` retains responsibility for runtime duplicate and unknown-reference errors at the external-input boundary.
+`Route` is the only routing Context service. `Route.layer` accepts a map whose
+keys are public model aliases:
 
-All errors in public router and plugin contracts are Schema-backed data. `Plugin.SetupError` and `Router.RouterError` are tagged unions of `Schema.TaggedError` cases with `cases` constructors (for example, `Router.RouterError.cases.NoRoute.make({ model })`), `guards`, and exhaustive `match`. `Deployment.ProviderError`, `Routing.RoutingError`, conversion errors, HTTP JSON input errors, and plugin deployment/projection errors are also `Schema.TaggedError` classes, so every typed failure is a native tagged Effect error as well as a validated Schema value. Pure protocol conversions and deployment constructors return `Result`; router acquisition, execution, and streams use `Effect`/`Stream`. Arbitrary `cause` fields use `Schema.Defect` for a lossy JSON-compatible encoding that omits nested error causes and stacks; HTTP responses select safe fields instead of forwarding causes.
+```ts
+Route.layer({
+	chat: (request) => openai.generate(request),
+	reliable: (request) =>
+		primary.generate(request).pipe(
+			Effect.catchIf(
+				(error) => error.retryable,
+				() => fallback.generate(request),
+			),
+		),
+})
+```
 
-The functional boundary is explicit: domain transitions use `Option`, immutable arrays and Effect `HashMap`/`HashSet` with pure reducers; stream accumulators start anew for each subscription. `Effect.forEach` sequences item effects. Host Layers and tests may use scoped `Ref`/`Deferred` for unavoidable coordination, while native server, process, buffer, file, clock and Promise operations stay at host boundaries. Review forbids loops, variable/property reassignment, mutable collections, mutation through collection callbacks, ad hoc classes and thrown exceptions in domain code; declarative `Schema.TaggedError` classes are the typed error contract. There is intentionally no automatic syntax gate.
+The handler owns provider choice, retry timing, health checks, and the point at
+which a failed stream can no longer be replayed. An unknown alias is
+`RouteUnknownModel`; malformed requests and handler failures are Schema-backed
+Route errors. The public model alias is the map key. Provider model identifiers
+remain inside provider Layers.
 
-`router.invoke(command, options)` is the single execution seam. A generation command returns semantic events; a protocol command may return an opaque response from a declared `DirectPipeline`, or fall back to a registry projection when no direct path exists. `Execution.complete` consumes one generation stream and requires one terminal snapshot. Every execution owns a `Deferred` cancellation signal that interrupts its response stream. Construction is lazy; `Effect`, `Stream`, `Layer` and `Scope` determine when I/O starts, who owns it, and how cancellation propagates.
+`Provider.Error` is the small normalized failure vocabulary shared by concrete
+provider packages. Core does not register providers, deployments, capabilities,
+or provider models. Each provider package exposes its own Context service and a
+Layer that decodes configuration, obtains an `HttpClient`, and owns upstream
+resources.
 
-`EffectAI.model(alias)` is the in-process upstream Layer for Effect AI. It
-provides `LanguageModel.LanguageModel`, `Model.ProviderName` as
-`"better-router"`, and `Model.ModelName` as the route alias while requiring
-`RouterRuntime`. `LanguageModel.make` owns structured-output decoding and
-toolkit execution; the adapter only projects portable `Prompt` values into a
-`GenerationRequest` with the fixed alias, stream flag, continuation ID,
-portable function tools, tool choice, and JSON Schema response format.
+`Api.Contract` is the only API combination type in core. A protocol package
+exports its own `HttpApi`, errors, wire Schemas, conversions, and handler Layer,
+usually as `contract`. `Router.make` combines the contract metadata and injects
+the composed `Route`; it does not contain protocol decoding or provider logic.
+`HttpApiGroup` remains an implementation detail of each protocol package.
 
-Non-streaming calls complete `Execution` and map the terminal response into
-Effect AI response parts. Streaming calls keep immutable state local to each
-subscription so metadata, text/reasoning boundaries, incremental tool
-arguments, decoded tool calls, and finish parts remain ordered. A failed
-terminal response emits an error part followed by `finish(error)` for streams;
-router stream failures use the Effect error channel. Both completion and stream
-consumption call `Execution.cancel` during finalization, including interruption.
-Prompt files/images, approvals, provider metadata, and provider-defined or
-dynamic tools are rejected as typed `AiError` values rather than discarded.
+`Convert` is pure. It uses `Result` for fallible projections and preserves
+Schema issue paths such as `request.messages[0].content[1].image_url.url`.
+Protocol-specific unsupported semantics are rejected by that protocol's
+conversion error contract.
 
-Routes list deployment IDs in fallback order; a policy may return an ordered subset of eligible candidates. A required upstream mode filters candidates before ranking, while a preferred mode uses that mode when available and otherwise selects another executor on the same deployment. Ingress HTTP versus SSE does not select upstream transport. A retryable connection or event error may move to the next deployment only before the first model event; after that, partial output must not be replayed. Middleware wraps the complete command handler in declared order, first middleware outermost.
+## Provider packages
 
-Each plugin's `HttpApi` fragment is retained for typed reflection. The staged `Router.make({ plugins })({ routes })` composes those fragments with `HttpApi.addHttpApi` and merges their handler Layers; every `HttpApiBuilder.group` uses its original fragment. The host supplies Effect's HTTP platform services and owns the serving Scope. No loopback HTTP call is made for direct SDK use. Streaming requests invoke the same projection/direct-pipeline seam; direct responses preserve provider-owned fields while cross-protocol requests use semantic generation events.
+`@better-router/provider-openai` exposes `OpenAIResponses` and
+`OpenAIChatCompletions`. `@better-router/provider-anthropic` exposes
+`AnthropicMessages`. These packages contain their upstream request Schema,
+HTTP status normalization, SSE decoding, and native event assembler. They
+depend on core only; they do not import protocol packages.
 
-## Protocol adapters
+The assembler translates provider chunks into semantic `Generation.Event`
+values before the process is returned. A retryable connection or protocol error
+can be handled by the route before the first semantic event. Once output has
+started, a route must not replay partial output through a fallback.
 
-The HTTP endpoints are `POST /v1/chat/completions`, `POST /v1/responses`, and `POST /v1/messages`. They authenticate before reading a JSON body capped at 1 MiB. OpenAI endpoints require the gateway Bearer key; Anthropic accepts its `x-api-key` or a Bearer key and requires `anthropic-version: 2023-06-01`. Gateway and upstream credentials are separate `Redacted` values. An unknown public model never reaches an upstream.
+## Protocol packages
 
-Supported cross-protocol data includes text, URL and base64 data URI images, function tools and results, JSON Schema output, applicable sampling/length controls, usage and incremental streams. A Chat or Anthropic upstream always requests streaming; a non-streaming ingress consumes the same event path to a complete snapshot. Anthropic requires `defaultMaxTokens` on deployment and uses an explicit request maximum first. The Responses executor uses the native Responses event stream. Each HTTP, upstream event, and host configuration boundary parses through Schema before projection; structural failures retain field paths and unportable semantics fail explicitly. Audio/video, built-in tools, reasoning state, cache options, nonportable annotations and cross-provider continuation are not silently discarded.
+The three protocol packages are independent of providers:
 
-Each HTTP adapter projects native JSON, SSE and error envelopes. `router.invoke` permits a connection-stage 429/5xx response before committing SSE; once semantic events have started, failures produce a native error frame without a success terminator or replay. Chat and Responses send `[DONE]` only after a normal terminal stream. Anthropic sends `message_stop` only after the source ends normally. Client cancellation interrupts the upstream source. `store: true` is unsupported by Chat and Anthropic deployments; Responses may forward it to its direct provider pipeline.
+- `protocol-openai-responses` owns the pinned generated Responses Schema and
+  JSON/SSE projection;
+- `protocol-openai-chat-completions` owns Chat Completions request/response
+  shapes, tool/image conversion, and SSE projection;
+- `protocol-anthropic-messages` owns Messages request/response shapes,
+  authentication metadata, and SSE projection.
 
-The examples read configuration once with Effect `Config` and start `HttpRouter.serve` with `NodeHttpServer.layer` and `NodeHttpClient.layerUndici`. They listen on loopback by default. Configuring a remote listener, TLS termination, rate limits and observability remains the operator's responsibility. No WebSocket ingress is declared; the router can select one if a plugin declares an executor.
+Each HTTP handler authenticates and decodes its request before calling Route.
+Non-streaming requests consume `process.response`; streaming requests consume
+`process.events`. Client cancellation calls `process.cancel`. A normal stream
+gets its protocol terminator (`[DONE]` or `message_stop`) only after a terminal
+semantic event and clean source completion.
 
-## Verification
+## Composition and hosts
 
-`devenv shell -- yarn check` builds the packages, checks type contracts, and exercises the package tests and guided example references. Protocol adapter tests check both JSON and SSE, native request shapes, images, tools, JSON Schema, usage, errors, truncated and malformed streams, body limits and cancellation. `devenv shell -- yarn build` emits ESM artifacts. Neither command requires a provider key or internet access.
+`Router.make({ route, providers, apis })` builds an in-process composed router.
+The effect must run with the services required by the supplied provider Layers
+(for example, provide `NodeHttpClient.layerUndici` at this composition scope).
+`Router.layer` exposes the same composition as a Layer for a long-lived host.
+Both functions only merge provider Layers, provide those Layers to the route,
+inject Route into protocol handlers, and combine the `HttpApi` fragments.
+`Router` is the composition seam. It builds the Route Layer with the supplied
+provider Layers, injects Route into each protocol handler Layer, and combines
+the protocol `HttpApi` contracts. It has no registration, execution, or
+projection algorithm of its own.
+
+The host supplies `HttpRouter.serve`, `NodeHttpServer`, `NodeHttpClient`, and
+the serving Scope. No loopback request is needed for SDK or Effect AI usage.
+`@better-router/effect-ai` provides an Effect AI `LanguageModel` Layer that
+calls Route directly and maps `Generation.Process` completion, streaming,
+tools, and typed failures.
+
+## Boundaries and validation
+
+Every untrusted wire, provider configuration, and upstream event is decoded by
+Effect Schema before semantic projection. Domain conversions do not perform
+I/O, read clocks, throw, or mutate captured state. Effects and Streams own
+I/O, cancellation, and resource lifetimes; Layers own service acquisition.
+Public model values are deeply readonly at the type level.
+
+The required checks are:
+
+```sh
+devenv shell -- yarn check
+devenv shell -- yarn build
+devenv shell -- yarn generate:openresponses --check
+```

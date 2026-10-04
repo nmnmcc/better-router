@@ -2,13 +2,11 @@ import { createServer } from "node:http"
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
-import { Router } from "@better-router/core"
-import {
-	AnthropicMessages,
-	AnthropicMessagesPlugin,
-} from "@better-router/plugin-anthropic-messages"
-import { OpenAIChatCompletionsPlugin } from "@better-router/plugin-openai-chat-completions"
-import { OpenAIResponses, OpenAIResponsesPlugin } from "@better-router/plugin-openai-responses"
+import { Route, Router } from "@better-router/core"
+import { AnthropicMessages } from "@better-router/provider-anthropic"
+import { OpenAIResponses } from "@better-router/provider-openai"
+import * as Anthropic from "@better-router/protocol-anthropic-messages"
+import * as ChatCompletions from "@better-router/protocol-openai-chat-completions"
 import { Config, Effect, Layer } from "effect"
 import { HttpRouter } from "effect/http"
 
@@ -33,49 +31,47 @@ const settings = Config.all({
 const server = Layer.unwrap(
 	Effect.gen(function* () {
 		const config = yield* settings
-		const primary = yield* Effect.fromResult(
-			OpenAIResponses.make({
-				id: "openai-primary",
-				model: config.openAIModel,
-				apiKey: config.openAIKey,
-				url: config.openAIUrl,
-			}),
-		)
-		const fallback = yield* Effect.fromResult(
-			AnthropicMessages.make({
-				id: "anthropic-fallback",
-				model: config.anthropicModel,
-				apiKey: config.anthropicKey,
-				url: config.anthropicUrl,
-				defaultMaxTokens: config.anthropicMaxTokens,
-			}),
-		)
-		const chat = OpenAIChatCompletionsPlugin.make({ gatewayKey: config.gatewayKey })
-		const responses = OpenAIResponsesPlugin.make({ deployments: [primary] })
-		const anthropic = AnthropicMessagesPlugin.make({ deployments: [fallback] })
-		const routes = Layer.unwrap(
-			Router.make({
-				plugins: [chat, responses, anthropic] as const,
-			})({
-				routes: [
-					{
-						model: config.publicModel,
-						deployments: [primary.id, fallback.id],
-					},
-				],
-			}).pipe(Effect.map((router) => router.http.routes)),
-		)
-
-		return HttpRouter.serve(routes).pipe(
+		const openAI = OpenAIResponses.layer({
+			model: config.openAIModel,
+			apiKey: config.openAIKey,
+			url: config.openAIUrl,
+		})
+		const anthropic = AnthropicMessages.layer({
+			model: config.anthropicModel,
+			apiKey: config.anthropicKey,
+			url: config.anthropicUrl,
+			defaultMaxTokens: config.anthropicMaxTokens,
+		})
+		const route = Route.layer({
+			[config.publicModel]: (request: Route.Request) =>
+				Effect.gen(function* () {
+					const primary = yield* OpenAIResponses.OpenAIResponses
+					const fallback = yield* AnthropicMessages.AnthropicMessages
+					return yield* primary.generate(request).pipe(
+						Effect.catchIf(
+							(error) => error.retryable,
+							() => fallback.generate(request),
+						),
+					)
+				}),
+		})
+		const router = yield* Router.make({
+			route,
+			providers: [openAI, anthropic],
+			apis: [
+				ChatCompletions.makeContract({ gatewayKey: config.gatewayKey }),
+				Anthropic.makeContract({ gatewayKey: config.gatewayKey }),
+			],
+		})
+		return HttpRouter.serve(router.http.routes).pipe(
 			Layer.provide(
 				NodeHttpServer.layer(createServer, {
 					host: config.host,
 					port: config.port,
 				}),
 			),
-			Layer.provide(NodeHttpClient.layerUndici),
 		)
-	}),
+	}).pipe(Effect.provide(NodeHttpClient.layerUndici)),
 )
 
 Layer.launch(server).pipe(NodeRuntime.runMain)

@@ -10,6 +10,6 @@ devenv shell -- yarn build
 | ---------- | ----------------------------------------------------------- | ------------------------------ |
 | Quickstart | Chat Completions through an OpenAI Responses deployment     | [README](quickstart/README.md) |
 | Failover   | Ordered OpenAI-to-Anthropic fallback behind one model alias | [README](failover/README.md)   |
-| SDK call   | In-process `router.invoke` without an HTTP server           | [README](sdk-call/README.md)   |
+| SDK call   | In-process `router.generate` without an HTTP server         | [README](sdk-call/README.md)   |
 
 Examples use real provider credentials and are not run against live providers in CI.

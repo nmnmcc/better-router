@@ -2,9 +2,10 @@ import { createServer } from "node:http"
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
-import { Router } from "@better-router/core"
-import { OpenAIChatCompletionsPlugin } from "@better-router/plugin-openai-chat-completions"
-import { OpenAIResponses, OpenAIResponsesPlugin } from "@better-router/plugin-openai-responses"
+import { Route, Router } from "@better-router/core"
+import { OpenAIResponses } from "@better-router/provider-openai"
+import * as ChatCompletions from "@better-router/protocol-openai-chat-completions"
+import * as Responses from "@better-router/protocol-openai-responses"
 import { Config, Effect, Layer } from "effect"
 import { HttpRouter } from "effect/http"
 
@@ -23,37 +24,35 @@ const settings = Config.all({
 const server = Layer.unwrap(
 	Effect.gen(function* () {
 		const config = yield* settings
-
-		const deployment = yield* Effect.fromResult(
-			OpenAIResponses.make({
-				id: "openai-responses",
-				model: config.upstreamModel,
-				apiKey: config.apiKey,
-				url: config.url,
-			}),
-		)
-
-		const chat = OpenAIChatCompletionsPlugin.make({ gatewayKey: config.gatewayKey })
-		const responses = OpenAIResponsesPlugin.make({ deployments: [deployment] })
-
-		const routes = Layer.unwrap(
-			Router.make({
-				plugins: [chat, responses] as const,
-			})({
-				routes: [{ model: config.publicModel, deployments: ["openai-responses"] }],
-			}).pipe(Effect.map((router) => router.http.routes)),
-		)
-
-		return HttpRouter.serve(routes).pipe(
+		const provider = OpenAIResponses.layer({
+			model: config.upstreamModel,
+			apiKey: config.apiKey,
+			url: config.url,
+		})
+		const route = Route.layer({
+			[config.publicModel]: (request: Route.Request) =>
+				Effect.gen(function* () {
+					const openai = yield* OpenAIResponses.OpenAIResponses
+					return yield* openai.generate(request)
+				}),
+		})
+		const router = yield* Router.make({
+			route,
+			providers: [provider],
+			apis: [
+				ChatCompletions.makeContract({ gatewayKey: config.gatewayKey }),
+				Responses.makeContract({ gatewayKey: config.gatewayKey }),
+			],
+		})
+		return HttpRouter.serve(router.http.routes).pipe(
 			Layer.provide(
 				NodeHttpServer.layer(createServer, {
 					host: config.host,
 					port: config.port,
 				}),
 			),
-			Layer.provide(NodeHttpClient.layerUndici),
 		)
-	}),
+	}).pipe(Effect.provide(NodeHttpClient.layerUndici)),
 )
 
 Layer.launch(server).pipe(NodeRuntime.runMain)

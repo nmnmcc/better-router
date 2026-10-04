@@ -1,0 +1,32 @@
+{
+	"name": "@better-router/protocol-openai-chat-completions",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		"./package.json": "./package.json",
+		".": {
+			"types": "./dist/index.d.mts",
+			"default": "./dist/index.mjs"
+		},
+		"./*": {
+			"types": "./dist/*.d.mts",
+			"default": "./dist/*.mjs"
+		},
+		"./index": null
+	},
+	"scripts": {
+		"build": "yarn --cwd ../.. tsdown -F protocol-openai-chat-completions",
+		"check": "tsc -b --pretty false"
+	},
+	"dependencies": {
+		"@better-router/core": "workspace:*"
+	},
+	"peerDependencies": {
+		"effect": "4.0.0"
+	},
+	"devDependencies": {
+		"effect": "4.0.0"
+	}
+}
