@@ -47,13 +47,18 @@ const deployment = {
 	tags: ["primary"],
 } as const satisfies DeploymentConfig
 
+const backup = { ...deployment, id: "messages-backup" } as const satisfies DeploymentConfig
+
 const routes = [
 	{
 		id: "messages-route",
 		model: "public-model",
 		deployments: [deployment.id],
-		policy: "least-busy",
+		strategy: "least-busy",
 		fallback: ["messages-backup"],
+		retry: { maxAttempts: 2, retryableKinds: ["unavailable"] },
+		access: { metadataKey: "tenant", allow: ["workspace"] },
+		budget: { key: "workspace", limit: 10 },
 	},
 ] as const satisfies readonly ModelRouteConfig[]
 
@@ -61,7 +66,7 @@ describe("Anthropic Messages object plugin", () => {
 	it("accepts complete readonly static declarations and Anthropic defaults", () => {
 		const configured = plugin({
 			gatewayKey: Redacted.make("gateway-fixture"),
-			deployments: [deployment],
+			deployments: [deployment, backup],
 			routes,
 		})
 
@@ -85,14 +90,23 @@ describe("Anthropic Messages object plugin", () => {
 		expect<WritableKeys<DeploymentConfig>>().type.toBe<never>()
 		expect<WritableKeys<Pricing>>().type.toBe<never>()
 		expect<WritableKeys<DeploymentLimits>>().type.toBe<never>()
+		expect<WritableKeys<ModelRouteConfig>>().type.toBe<never>()
+		expect<WritableKeys<NonNullable<ModelRouteConfig["retry"]>>>().type.toBe<never>()
+		expect<WritableKeys<NonNullable<ModelRouteConfig["access"]>>>().type.toBe<never>()
+		expect<WritableKeys<NonNullable<ModelRouteConfig["budget"]>>>().type.toBe<never>()
+		expect<NonNullable<ModelRouteConfig["retry"]>["retryableKinds"]>().type.toBe<
+			readonly string[] | undefined
+		>()
+		expect<NonNullable<ModelRouteConfig["access"]>["allow"]>().type.toBe<readonly string[]>()
 		expect<Options["deployments"]>().type.toBe<readonly DeploymentConfig[] | undefined>()
 		expect<Options["routes"]>().type.toBe<readonly ModelRouteConfig[] | undefined>()
 		expect(configured.config.deployments).type.not.toBeAssignableTo<DeploymentConfig[]>()
+		expect(configured.config.routes).type.not.toBeAssignableTo<ModelRouteConfig[]>()
 	})
 
 	it("keeps credential and HTTP client requirements visible at startup", () => {
 		const declared = Router.make({
-			plugins: [plugin({ deployments: [deployment], routes })] as const,
+			plugins: [plugin({ deployments: [deployment, backup], routes })] as const,
 		})
 		type Declared = Result.Result.Success<typeof declared>
 		type Bound = ReturnType<typeof Router.layer<Declared["plugins"]>>
@@ -105,12 +119,18 @@ describe("Anthropic Messages object plugin", () => {
 
 	it("retains literal identity, capabilities, and the HTTP API", () => {
 		const configured = plugin()
-		type Http = Extract<PluginConfig["http"][number], { readonly api: unknown }>
+		type Http = PluginConfig["http"][0]
 
 		expect(configured.id).type.toBe<"anthropic-messages">()
 		expect<Plugin["capabilities"]>().type.toBe<
 			readonly [typeof Protocol.capability, typeof Provider.Deployment.messagesCapability]
 		>()
+		expect(configured.capabilities[0].id).type.toBe<"protocol.anthropic.messages">()
+		expect(configured.capabilities[1].id).type.toBe<"provider.anthropic.messages">()
+		expect(configured.capabilities[0].kind).type.toBe<"protocol">()
+		expect(configured.capabilities[1].kind).type.toBe<"provider">()
+		expect(configured.capabilities[0].projections).type.toBe<readonly "generation"[]>()
+		expect(configured.capabilities[1].projections).type.toBe<readonly "generation"[]>()
 		expect(configured.config.providers).type.toBe<
 			readonly [typeof Provider.Deployment.contract]
 		>()
