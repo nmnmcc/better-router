@@ -1,38 +1,55 @@
 import type { Redacted } from "effect"
-import { Plugin as RouterPlugin } from "@better-router/core"
+import type { Plugin as RouterPlugin } from "@better-router/core"
+import type {
+	HttpContractContribution,
+	ModelRouteConfig,
+} from "@better-router/core/PluginContributions"
 import * as Protocol from "@better-router/protocol-openai-chat-completions"
 import * as Provider from "@better-router/provider-openai"
+import type { DeploymentConfig } from "@better-router/provider-openai/Deployment"
+
+export type ChatDeployment = Omit<DeploymentConfig, "protocol"> & {
+	readonly protocol: "chat-completions"
+}
 
 export interface Options {
 	readonly gatewayKey?: Redacted.Redacted<string>
-	readonly provider?: Parameters<typeof Provider.OpenAIChatCompletions.layer>[0]
+	/** Static deployments keep model and credential references separate from capability. */
+	readonly deployments?: readonly ChatDeployment[]
+	/** Public aliases and ordered fallback candidates for these deployments. */
+	readonly routes?: readonly ModelRouteConfig[]
 }
 
-type PluginState = {
-	readonly apis: readonly [ReturnType<typeof Protocol.makeContract>]
-	readonly providers:
-		readonly [] | readonly [ReturnType<typeof Provider.OpenAIChatCompletions.layer>]
+export interface PluginConfig {
+	readonly http: readonly [HttpContractContribution<typeof Protocol.Api.api>]
+	readonly projections: readonly [typeof Protocol.projection]
+	readonly providers: readonly [typeof Provider.Deployment.contract]
+	readonly deployments: readonly ChatDeployment[]
+	readonly routes: readonly ModelRouteConfig[]
 }
 
-export type Plugin = RouterPlugin.RouterPlugin<
-	"openai-chat-completions",
-	readonly [typeof Protocol.capability, typeof Provider.OpenAIChatCompletions.capability],
-	PluginState
->
+export interface Plugin {
+	readonly id: "openai-chat-completions"
+	readonly capabilities: readonly [
+		typeof Protocol.capability,
+		typeof Provider.Deployment.chatCompletionsCapability,
+	]
+	readonly config: PluginConfig
+}
 
-/** Compose Chat Completions capability declarations and state configuration. */
+/** Declare Chat Completions ingress, deployments, and public model aliases. */
 export const plugin = (options: Options = {}): Plugin =>
-	RouterPlugin.make({
+	({
 		id: "openai-chat-completions",
-		capabilities: [Protocol.capability, Provider.OpenAIChatCompletions.capability] as const,
-		state: {
-			apis: [Protocol.makeContract({ gatewayKey: options.gatewayKey })] as const,
-			providers:
-				options.provider === undefined
-					? ([] as const)
-					: ([Provider.OpenAIChatCompletions.layer(options.provider)] as const),
+		capabilities: [Protocol.capability, Provider.Deployment.chatCompletionsCapability] as const,
+		config: {
+			http: [Protocol.makeHttpContribution({ gatewayKey: options.gatewayKey })] as const,
+			projections: [Protocol.projection] as const,
+			providers: [Provider.Deployment.contract] as const,
+			deployments: options.deployments?.map((deployment) => ({ ...deployment })) ?? [],
+			routes: options.routes ?? [],
 		},
-	})
+	}) satisfies RouterPlugin.RouterPlugin<Plugin["id"], Plugin["capabilities"], PluginConfig>
 
 export const make = plugin
 export const makePlugin = plugin

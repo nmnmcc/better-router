@@ -1,41 +1,58 @@
 import type { Redacted } from "effect"
-import { Plugin as RouterPlugin } from "@better-router/core"
+import type { Plugin as RouterPlugin } from "@better-router/core"
+import type {
+	HttpContractContribution,
+	ModelRouteConfig,
+} from "@better-router/core/PluginContributions"
 import * as Protocol from "@better-router/protocol-openai-responses"
 import * as Provider from "@better-router/provider-openai"
+import type { DeploymentConfig } from "@better-router/provider-openai/Deployment"
+
+export type ResponsesDeployment = Omit<DeploymentConfig, "protocol"> & {
+	readonly protocol: "responses"
+}
 
 export interface Options {
 	readonly gatewayKey?: Redacted.Redacted<string>
-	readonly provider?: Parameters<typeof Provider.OpenAIResponses.layer>[0]
+	/** Static deployments keep model and credential references separate from capability. */
+	readonly deployments?: readonly ResponsesDeployment[]
+	/** Public aliases and ordered fallback candidates for these deployments. */
+	readonly routes?: readonly ModelRouteConfig[]
 }
 
-type PluginState = {
-	readonly apis: readonly [ReturnType<typeof Protocol.makeContract>]
-	readonly providers: readonly [] | readonly [ReturnType<typeof Provider.OpenAIResponses.layer>]
+export interface PluginConfig {
+	readonly http: readonly [HttpContractContribution<typeof Protocol.Api.api>]
+	readonly projections: readonly [typeof Protocol.projection]
+	readonly providers: readonly [typeof Provider.Deployment.contract]
+	readonly deployments: readonly ResponsesDeployment[]
+	readonly routes: readonly ModelRouteConfig[]
 }
 
-export type Plugin = RouterPlugin.RouterPlugin<
-	"openai-responses",
-	readonly [typeof Protocol.capability, typeof Provider.OpenAIResponses.capability],
-	PluginState
->
+export interface Plugin {
+	readonly id: "openai-responses"
+	readonly capabilities: readonly [
+		typeof Protocol.capability,
+		typeof Provider.Deployment.responsesCapability,
+	]
+	readonly config: PluginConfig
+}
 
 /**
- * Compose the Responses ingress and its optional OpenAI state in one plugin.
- * The capability descriptors are stable; credentials and provider config stay
- * inside the returned state Layers.
+ * Declare Responses ingress and independent OpenAI deployments. Credentials
+ * and runtime services are resolved by the host when its Router Layer starts.
  */
 export const plugin = (options: Options = {}): Plugin =>
-	RouterPlugin.make({
+	({
 		id: "openai-responses",
-		capabilities: [Protocol.capability, Provider.OpenAIResponses.capability] as const,
-		state: {
-			apis: [Protocol.makeContract({ gatewayKey: options.gatewayKey })] as const,
-			providers:
-				options.provider === undefined
-					? ([] as const)
-					: ([Provider.OpenAIResponses.layer(options.provider)] as const),
+		capabilities: [Protocol.capability, Provider.Deployment.responsesCapability] as const,
+		config: {
+			http: [Protocol.makeHttpContribution({ gatewayKey: options.gatewayKey })] as const,
+			projections: [Protocol.projection] as const,
+			providers: [Provider.Deployment.contract] as const,
+			deployments: options.deployments?.map((deployment) => ({ ...deployment })) ?? [],
+			routes: options.routes ?? [],
 		},
-	})
+	}) satisfies RouterPlugin.RouterPlugin<Plugin["id"], Plugin["capabilities"], PluginConfig>
 
 export const make = plugin
 export const makePlugin = plugin
