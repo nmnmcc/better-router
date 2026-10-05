@@ -1,156 +1,197 @@
 # Architecture
 
-Better Router is organized around a semantic generation contract and
-Better Auth-style object plugins. The dependency direction is:
+Better Router is an Effect based generation gateway. It presents one
+protocol-neutral generation contract to protocol adapters, while deployments,
+provider credentials, routing policy, HTTP projections, and persistence remain
+owned by plugins. The dependency direction is:
 
 ```text
-Plugin declaration → Registry → Route → Provider Context → Generation.Process
+Plugin declarations → Registry snapshot → routing pipeline → Deployment
+    → Provider Contract → Generation.Process → protocol projection
 ```
 
-The arrows describe ownership. A protocol package owns its public HTTP
-contract and wire Schema. Its pure conversion functions project that wire
-shape into the core request and project semantic events back to the wire. The
-protocol handler asks `Route` for a process and does not know which provider is
-used.
+The arrows describe ownership. A protocol package owns its wire Schema and
+conversion rules. A provider package owns upstream request/response codecs and
+transport details. Core composes those declarations and controls selection,
+cancellation, fallback, and resource lifetime.
 
-## Core contracts
+## Static declarations and runtime state
 
-`Capability` and `State` are deliberately different contracts. A capability is
-the stable, stateless identity of a feature (`id`, version, kind and semantic
-projections). State is process configuration: route Layers, provider Layers,
-HTTP contracts and credentials. A key or provider model can therefore change
-without changing the capability identity.
-
-`Plugin` is an explicit object, following the Better Auth plugin shape:
+The plugin object is the assembly boundary. Its declarations are immutable and
+are checked before any Layer or network resource is acquired:
 
 ```ts
 const plugin = {
-	id: "openai-responses",
-	capabilities: [Responses.capability, OpenAI.capability],
-	state: {
-		apis: [Responses.makeContract({ gatewayKey })],
-		providers: [OpenAI.layer(providerConfig)],
+	id: "acme-openai",
+	capabilities: [generationCapability, openAiCapability],
+	config: {
+		deployments: [deployment],
+		modelRoutes: [modelRoute],
+		policies: [policy],
+		projections: [projection],
+		http: [httpApi],
 	},
-}
+	layer: providerLayer,
+	init: (context) => initializeRuntime(context),
+} as const
 ```
 
-`Router.make({ plugins })` receives the tuple directly. `Registry` reduces the
-declarations immutably, rejects duplicate plugin/capability IDs and HTTP
-routes, and only then starts plugin hooks or builds resource Layers. A plugin
-startup hook may acquire resources, but it cannot add a new declaration after
-construction.
+`Capability` is stable metadata: an identifier, version, kind, and supported
+semantic projections or endpoint parameters. It never contains credentials,
+provider model names, URLs, prices, counters, health, or cooldown state.
+`PluginConfig` is static deployment and composition data. A deployment declares
+its private provider model, provider identifier, protocol, credential reference,
+limits, tags, and pricing. A model route separately maps a public alias to ordered
+deployment candidates and fallback configuration.
 
-`Generation` contains the protocol-neutral request, event, and response model.
-Its `Process` namespace constructs a live process:
+Runtime data is supplied by Effect services and scoped Layers. The router keeps
+active requests, latency, failure counts, cooldowns, token/request budgets,
+and optional caches in an atomic runtime service. A persistence Layer can
+restore and update that state; the declaration snapshot itself is never
+mutated. Secrets are resolved through a credential service and are represented
+by references in declarations.
 
-- `events` is a lazy semantic event stream;
-- `response`/`terminal` fold one subscription to exactly one terminal response;
-- `cancel` interrupts all views created from the process and is idempotent.
+## Provider Contracts and capability checks
 
-Providers return `Generation.Process<ProviderError, R>`. A process is therefore
-the lifecycle of one generation, not a static response or an opaque native
-execution object. A missing or duplicate terminal event becomes
-`Generation.ProcessError`.
+A `ProviderContract` describes a provider's endpoint matrix, supported
+parameters, request and response codecs, URL and authentication transforms,
+error mapping, and stream terminal semantics. One contract can expose multiple
+endpoints, such as Chat Completions and Responses, while keeping each endpoint's
+capabilities explicit.
 
-`Route` is the only routing Context service. `Route.plugin` accepts a map whose
-keys are public model aliases and stores the resulting route Layer in plugin
-state:
+At construction time the registry validates every
+`capability × deployment × endpoint` combination. Unsupported combinations,
+missing references, and duplicate identifiers are `SetupError` values. They
+cannot remain latent until the first request. Unknown configuration is decoded
+with Effect Schema; nested issue paths are retained for the host's error
+renderer.
 
-```ts
-Route.plugin({
-	chat: (request) => openai.generate(request),
-	reliable: (request) =>
-		primary.generate(request).pipe(
-			Effect.catchIf(
-				(error) => error.retryable,
-				() => fallback.generate(request),
-			),
-		),
-})
+## Registry and lifecycle
+
+`Router.make` performs pure preflight and returns
+`Result<Router.Router<Plugins>, SetupError>`. It builds one immutable
+`Registry.Snapshot` containing plugin, capability, provider, deployment, model
+route, policy, pipeline, projection, and HTTP indexes. The snapshot is supplied
+to plugin initialization, so an initializer can inspect the complete graph but
+cannot append declarations after construction.
+
+`Router.runtime` acquires the runtime within the caller's Scope and
+`Router.layer` exposes it as `RouterRuntime`. Both require the services declared
+by the selected plugins. Startup proceeds in this order:
+
+```text
+static preflight
+→ external service Layers
+→ persistence migrations
+→ runtime state services
+→ plugin init in declaration order
+→ protocol HTTP layers
 ```
 
-The handler owns provider choice, retry timing, health checks, and the point at
-which a failed stream can no longer be replayed. An unknown alias is
-`RouteUnknownModel`; malformed requests and handler failures are Schema-backed
-Route errors. The public model alias is the map key. Provider model identifiers
-remain inside provider Layers.
+An initializer may acquire resources and return runtime values. If an
+initializer fails or is interrupted, the Scope releases all resources acquired
+by earlier initializers. Layer requirements and typed errors are propagated
+through the router's type; missing `HttpClient`, clock, credential, or SQL
+services are visible at composition time.
 
-`Provider.Error` is the small normalized failure vocabulary shared by concrete
-provider packages. Each provider package exposes its own Context service and a
-Layer that decodes configuration, obtains an `HttpClient`, and owns upstream
-resources. The provider Layer is state supplied by a plugin; the provider
-capability remains independent of that state.
+## Generation routing pipeline
 
-`Api.Contract` is the only API combination type in core. A protocol package
-exports its own `HttpApi`, errors, wire Schemas, conversions, and handler Layer,
-usually as `contract`. `Router.make` combines the contract metadata and injects
-the composed `Route`; it does not contain protocol decoding or provider logic.
-`HttpApiGroup` remains an implementation detail of each protocol package.
+Every request is normalized into a `RoutingContext`:
 
-`Convert` is pure. It uses `Result` for fallible projections and preserves
-Schema issue paths such as `request.messages[0].content[1].image_url.url`.
-Protocol-specific unsupported semantics are rejected by that protocol's
-conversion error contract.
+```text
+raw request
+  → structured request + metadata
+  → candidate deployments
+  → ordered middleware and routing policies
+  → selected deployment
+  → provider process
+  → usage/cost/health signals and hooks
+```
 
-## Provider packages
+Policies run as an ordered asynchronous pipeline. Each policy may narrow the
+candidate set and add immutable signals used by subsequent policies and
+strategies. An empty set fails with `NoCandidateDeployments`. Built-in
+selection strategies include simple order, weighted choice, least busy,
+latency, and cost. Health and budget filters use runtime state without
+changing the static deployment.
 
-`@better-router/provider-openai` exposes `OpenAIResponses` and
-`OpenAIChatCompletions`. `@better-router/provider-anthropic` exposes
-`AnthropicMessages`. These packages contain their upstream request Schema,
-HTTP status normalization, SSE decoding, and native event assembler. They
-depend on core only; they do not import protocol packages.
+Fallback and retry are constrained by semantic output. A connection or
+protocol failure may move to the next eligible deployment before the first
+generation event. Once a response or stream event has been emitted, the
+router cannot replay partial output through another deployment. Cancellation,
+terminal events, usage, cost, and errors all finalize the attempt and request
+hooks exactly once.
 
-The assembler translates provider chunks into semantic `Generation.Event`
-values before the process is returned. A retryable connection or protocol error
-can be handled by the route before the first semantic event. Once output has
-started, a route must not replay partial output through a fallback.
+`Generation.Process` remains the provider-neutral execution value. Its lazy
+event stream, terminal response view, and idempotent cancellation preserve the
+same lifecycle for SDK calls and HTTP adapters.
 
-## Protocol packages
+## Hooks, middleware, and HTTP
 
-The three protocol packages are independent of providers:
+Request hooks surround the whole command (`beforeRequest`, `afterResponse`,
+`onError`, and `onCancel`). Attempt hooks surround each selected deployment
+(`beforeAttempt`, `afterSuccess`, `afterFailure`, `onStreamEvent`, and
+`onFinalize`). Hooks run in declaration order, use typed failures, and observe
+events without modifying the registry.
 
-- `protocol-openai-responses` owns the pinned generated Responses Schema and
-  JSON/SSE projection;
-- `protocol-openai-chat-completions` owns Chat Completions request/response
-  shapes, tool/image conversion, and SSE projection;
-- `protocol-anthropic-messages` owns Messages request/response shapes,
-  authentication metadata, and SSE projection.
+Plugins contribute typed HTTP APIs. Each API declares method, path, input and
+output Schema, handler, and middleware. Registry construction rejects duplicate
+HTTP groups and method/path pairs. Generation adapters support JSON and SSE,
+authenticate before invoking an upstream, map provider errors to the protocol
+error envelope, and release the upstream process when the client disconnects.
+Bearer and hop-by-hop headers are filtered at the boundary. A stream emits a
+protocol terminator only after a normal terminal semantic event; post-header
+failures do not emit a success terminator or replay through a fallback.
 
-Each HTTP handler authenticates and decodes its request before calling Route.
-Non-streaming requests consume `process.response`; streaming requests consume
-`process.events`. Client cancellation calls `process.cancel`. A normal stream
-gets its protocol terminator (`[DONE]` or `message_stop`) only after a terminal
-semantic event and clean source completion.
+The current protocol packages provide OpenAI Responses, OpenAI Chat
+Completions, and Anthropic Messages projections. They depend on core's route
+and generation contracts, never on a concrete provider package. The provider
+packages provide OpenAI and Anthropic contracts and never import protocol
+packages.
 
-## Composition and hosts
+## Persistence boundary
 
-`Router.make({ plugins })` builds an in-process composed router. A route may be
-declared as `Route.plugin(handlers)` or supplied directly for compatibility.
-The effect must run with the services required by the supplied state Layers
-(for example, provide `NodeHttpClient.layerUndici` at this composition scope).
-`Router.layer` exposes the same composition as a Layer for a long-lived host.
-The composer provides plugin provider Layers to the route, injects Route into
-plugin HTTP handlers, and combines their `HttpApi` contracts. The resulting
-router exposes its immutable `registry` for inspection and host integration.
+Core defines persistence ports and a memory backend rather than a database
+driver. Its namespaced typed state store uses Schema codecs and provides
+`get`/`set`/`update`/compare-and-set/delete operations, transaction boundaries,
+and migration declarations. The memory Layer is suitable for tests and local
+hosts. The persistence companion binds those ports to Effect SQL; the host
+supplies SQLite or another SQL driver, and migrations run before plugin
+initialization.
 
-The host supplies `HttpRouter.serve`, `NodeHttpServer`, `NodeHttpClient`, and
-the serving Scope. No loopback request is needed for SDK or Effect AI usage.
-`@better-router/effect-ai` provides an Effect AI `LanguageModel` Layer that
-calls Route directly and maps `Generation.Process` completion, streaming,
-tools, and typed failures.
+The default persisted records are deployment health and cooldown, latency and
+failure counters, usage/cost budgets, and optional response cache entries.
+Rows are decoded through Schema before entering runtime state; credentials are
+never written as cleartext. Persistence is optional: without a SQL Layer the
+same runtime service uses in-memory state.
 
-## Boundaries and validation
+The routing snapshot has one live Router runtime owner per persistence backend.
+Close that owner's Scope before starting a replacement runtime against the same
+backend. Startup resets active requests and token/cost reservations, discards
+unfinished attempts, and hydrates committed health, cooldown, latency, usage,
+cost and budget totals for the configured deployments. It retains the current
+rate window counters until their wall-clock window expires. This restart
+recovery does not coordinate simultaneous Router owners; multi-process routing
+requires a separate ownership and fencing protocol.
 
-Every untrusted wire, provider configuration, and upstream event is decoded by
-Effect Schema before semantic projection. Domain conversions do not perform
-I/O, read clocks, throw, or mutate captured state. Effects and Streams own
-I/O, cancellation, and resource lifetimes; Layers own service acquisition.
-Public model values are deeply readonly at the type level.
+## Functional and validation boundaries
 
-The required checks are:
+All untrusted wire values, plugin descriptors, configuration, database rows,
+and upstream events are decoded once with Effect Schema. Pure conversion and
+selection functions return `Result` or immutable values; Effects and Streams
+own I/O, resource acquisition, interruption, and concurrency. Public models
+are deeply readonly at the type level. Registry indexes use immutable
+collections and are built before any external effect runs.
+
+The required local checks are:
 
 ```sh
 devenv shell -- yarn check
 devenv shell -- yarn build
 devenv shell -- yarn generate:openresponses --check
 ```
+
+The Generation domain is the first execution domain. Embeddings, audio,
+images, batches, realtime, and other provider-specific domains can register
+their own capability and contract in the same plugin shape without widening
+the Generation ABI.

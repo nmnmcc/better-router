@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Match, Redacted, Result, Schema, Stream } from "effect"
+import { Effect, Exit, Match, Redacted, Result, Schema, Scope, Stream } from "effect"
 import { Sse } from "effect/encoding"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import * as CoreGeneration from "@better-router/core/Generation"
@@ -9,7 +9,6 @@ import {
 } from "@better-router/core/GenerationSchema"
 import { Error as ProviderError } from "@better-router/core/Provider"
 import * as Capability from "@better-router/core/Capability"
-import * as RouterPlugin from "@better-router/core/Plugin"
 
 export interface Config {
 	readonly model: string
@@ -36,9 +35,39 @@ export interface Service {
 	readonly generate: (request: Request) => Effect.Effect<Process, ProviderError>
 }
 
-export class OpenAIResponses extends Context.Service<OpenAIResponses, Service>()(
-	"BetterRouterOpenAIResponses",
-) {}
+export interface EncodedRequest {
+	readonly url: string
+	readonly method: "POST"
+	readonly headers: Readonly<Record<string, string>>
+	readonly body: Readonly<Record<string, unknown>>
+}
+
+/** Stable endpoint capability; Deployment owns model, credentials, and limits. */
+export const capability: Capability.Capability<
+	"provider.openai.responses",
+	"provider",
+	"generation"
+> = Capability.make({
+	id: "provider.openai.responses",
+	version: 1,
+	kind: "provider",
+	projections: ["generation"],
+	endpoints: [
+		{
+			id: "responses",
+			parameters: [
+				"input",
+				"instructions",
+				"tools",
+				"stream",
+				"temperature",
+				"top_p",
+				"max_output_tokens",
+			],
+			streaming: true,
+		},
+	],
+} as const)
 
 const failure = (
 	kind: ProviderError["kind"],
@@ -53,7 +82,7 @@ const validateConfig = (config: Config): Result.Result<Config, ConfigError> =>
 		? Result.fail(ConfigError.make({ message: "url must use HTTP(S)" }))
 		: Result.succeed(config)
 
-const statusError = (status: number): ProviderError =>
+export const classifyStatus = (status: number): ProviderError =>
 	Match.value(status).pipe(
 		Match.when(429, () => failure("rate_limited", "OpenAI rate limited the request", true)),
 		Match.whenOr(401, 403, () => failure("unauthorized", "OpenAI authentication failed")),
@@ -73,13 +102,35 @@ const requestBody = (request: Request): Readonly<Record<string, unknown>> => ({
 	stream: true,
 })
 
-type StreamState = { readonly terminal: boolean; readonly done: boolean }
+/** Decode provider bytes strictly, including an explicit final decoder flush. */
+const decodeUtf8 = (bytes: Stream.Stream<Uint8Array, unknown>): Stream.Stream<string, unknown> =>
+	Stream.concat(
+		Stream.map(bytes, (chunk) => ({ type: "chunk" as const, chunk })),
+		Stream.succeed({ type: "end" as const }),
+	).pipe(
+		Stream.mapAccumEffect(
+			() => new TextDecoder("utf-8", { fatal: true }),
+			(decoder, entry) =>
+				Effect.try({
+					try: () =>
+						entry.type === "chunk"
+							? ([decoder, [decoder.decode(entry.chunk, { stream: true })]] as const)
+							: ([decoder, [decoder.decode()]] as const),
+					catch: (cause) => cause,
+				}),
+		),
+	)
+
+type StreamState = {
+	readonly terminal: boolean
+	readonly done: boolean
+	readonly sequence: number
+}
 
 const streamEvents = (
 	bytes: Stream.Stream<Uint8Array, unknown>,
 ): Stream.Stream<CoreGeneration.Event, ProviderError> => {
-	const frames = bytes.pipe(
-		Stream.decodeText(),
+	const frames = decodeUtf8(bytes).pipe(
 		Stream.pipeThroughChannel(Sse.decode({ maxEventSize: 1024 * 1024 })),
 	)
 	return Stream.concat(
@@ -87,7 +138,7 @@ const streamEvents = (
 		Stream.succeed({ type: "end" as const }),
 	).pipe(
 		Stream.mapAccumEffect(
-			(): StreamState => ({ terminal: false, done: false }),
+			(): StreamState => ({ terminal: false, done: false, sequence: -1 }),
 			(state, entry) =>
 				entry.type === "end"
 					? state.terminal
@@ -126,6 +177,32 @@ const streamEvents = (
 									event.type === "response.completed" ||
 									event.type === "response.incomplete" ||
 									event.type === "response.failed"
+								const statusMatches =
+									event.type === "response.queued"
+										? event.response.status === "queued"
+										: event.type === "response.in_progress"
+											? event.response.status === "in_progress"
+											: event.type === "response.completed"
+												? event.response.status === "completed"
+												: event.type === "response.incomplete"
+													? event.response.status === "incomplete"
+													: event.type === "response.failed"
+														? event.response.status === "failed"
+														: true
+								if (!statusMatches)
+									return yield* Effect.fail(
+										failure(
+											"unknown",
+											"OpenAI response event status does not match its type",
+										),
+									)
+								if (event.sequence_number <= state.sequence)
+									return yield* Effect.fail(
+										failure(
+											"unknown",
+											"OpenAI response event sequence is not increasing",
+										),
+									)
 								if (state.terminal)
 									return yield* Effect.fail(
 										failure(
@@ -134,7 +211,11 @@ const streamEvents = (
 										),
 									)
 								return [
-									{ ...state, terminal: terminal || state.terminal },
+									{
+										...state,
+										terminal: terminal || state.terminal,
+										sequence: event.sequence_number,
+									},
 									[event],
 								] as const
 							}),
@@ -152,6 +233,15 @@ const responseEvents = (value: unknown): Stream.Stream<CoreGeneration.Event, Pro
 		Schema.decodeUnknownEffect(ResponseSchema)(value).pipe(
 			Effect.mapError((cause) =>
 				failure("unknown", "Invalid OpenAI Responses JSON", false, cause),
+			),
+			Effect.flatMap((response) =>
+				response.status === "completed" ||
+				response.status === "incomplete" ||
+				response.status === "failed"
+					? Effect.succeed(response)
+					: Effect.fail(
+							failure("unknown", "OpenAI JSON response has no terminal status"),
+						),
 			),
 			Effect.map((response) => {
 				const type =
@@ -174,58 +264,107 @@ const generate = (
 	config: Config,
 	request: Request,
 ): Effect.Effect<Process, ProviderError> =>
-	Effect.gen(function* () {
-		const parsed = yield* Schema.decodeUnknownEffect(RequestSchema)(request).pipe(
-			Effect.mapError((cause) =>
-				failure("invalid_request", "Invalid generation request", false, cause),
-			),
-		)
-		const withOrganization = config.organization
-			? HttpClientRequest.setHeader("openai-organization", config.organization)
-			: (value: HttpClientRequest.HttpClientRequest) => value
-		const outgoing = HttpClientRequest.post(
-			(config.url ?? new URL("https://api.openai.com/v1/responses")).toString(),
-		).pipe(
-			HttpClientRequest.bearerToken(config.apiKey),
-			HttpClientRequest.setHeader("content-type", "application/json"),
-			HttpClientRequest.bodyJsonUnsafe(requestBody({ ...parsed, model: config.model })),
-			withOrganization,
-		)
-		const response = yield* client
-			.execute(outgoing)
-			.pipe(
-				Effect.mapError((cause) =>
-					failure("unavailable", "OpenAI connection failed", true, cause),
+	Effect.uninterruptibleMask((restore) =>
+		Effect.gen(function* () {
+			const requestScope = yield* Scope.make()
+			return yield* restore(
+				Effect.gen(function* () {
+					const parsed = yield* Schema.decodeUnknownEffect(RequestSchema)(request).pipe(
+						Effect.mapError((cause) =>
+							failure("invalid_request", "Invalid generation request", false, cause),
+						),
+					)
+					const withOrganization = config.organization
+						? HttpClientRequest.setHeader("openai-organization", config.organization)
+						: (value: HttpClientRequest.HttpClientRequest) => value
+					const outgoing = HttpClientRequest.post(
+						(config.url ?? new URL("https://api.openai.com/v1/responses")).toString(),
+					).pipe(
+						HttpClientRequest.bearerToken(config.apiKey),
+						HttpClientRequest.setHeader("content-type", "application/json"),
+						HttpClientRequest.bodyJsonUnsafe(
+							requestBody({ ...parsed, model: config.model }),
+						),
+						withOrganization,
+					)
+					const response = yield* HttpClient.withScope(client)
+						.execute(outgoing)
+						.pipe(
+							Scope.provide(requestScope),
+							Effect.mapError((cause) =>
+								failure("unavailable", "OpenAI connection failed", true, cause),
+							),
+						)
+					if (response.status < 200 || response.status >= 300)
+						return yield* Effect.fail(classifyStatus(response.status))
+					const contentType = response.headers["content-type"]?.toLowerCase() ?? ""
+					const events = contentType.startsWith("text/event-stream")
+						? streamEvents(response.stream)
+						: Stream.map(
+								Stream.fromEffect(response.json).pipe(
+									Stream.mapError((cause) =>
+										failure(
+											"unknown",
+											"Unable to read OpenAI response",
+											false,
+											cause,
+										),
+									),
+								),
+								responseEvents,
+							).pipe(Stream.flatten)
+					const process = yield* CoreGeneration.Process.make(
+						events.pipe(Stream.onExit((exit) => Scope.close(requestScope, exit))),
+					)
+					return {
+						...process,
+						cancel: process.cancel.pipe(
+							Effect.andThen(Scope.close(requestScope, Exit.void)),
+						),
+					}
+				}),
+			).pipe(
+				Effect.onExit((exit) =>
+					Exit.isFailure(exit) ? Scope.close(requestScope, exit) : Effect.void,
 				),
 			)
-		if (response.status < 200 || response.status >= 300)
-			return yield* Effect.fail(statusError(response.status))
-		const contentType = response.headers["content-type"]?.toLowerCase() ?? ""
-		const events = contentType.startsWith("text/event-stream")
-			? streamEvents(response.stream)
-			: Stream.map(
-					Stream.fromEffect(response.json).pipe(
-						Stream.mapError((cause) =>
-							failure("unknown", "Unable to read OpenAI response", false, cause),
-						),
-					),
-					responseEvents,
-				).pipe(Stream.flatten)
-		return yield* CoreGeneration.Process.make(events)
-	})
+		}),
+	)
 
-export const layer = (
-	config: unknown,
-): Layer.Layer<OpenAIResponses, ConfigError, HttpClient.HttpClient> =>
-	Layer.effect(
-		OpenAIResponses,
-		Effect.gen(function* () {
-			const parsed = yield* Schema.decodeUnknownEffect(ConfigSchema)(config).pipe(
-				Effect.mapError((cause) => ConfigError.make({ message: cause.message })),
-				Effect.flatMap((value) => Effect.fromResult(validateConfig(value))),
-			)
-			const client = yield* HttpClient.HttpClient
-			return { generate: (request: Request) => generate(client, parsed, request) }
+/**
+ * Build a request executor for one deployment.
+ *
+ * The executor deliberately has no Context tag of its own.  A router can
+ * therefore keep one executor per deployment without one deployment
+ * overwriting another in a process-wide service registry.
+ */
+export const makeService = (config: Config, client: HttpClient.HttpClient): Service => ({
+	generate: (request) => generate(client, config, request),
+})
+
+/** Pure request encoding used by transports and contract inspection tools. */
+export const encodeRequest = (
+	config: Config,
+	request: Request,
+): Result.Result<EncodedRequest, ProviderError> =>
+	Schema.decodeUnknownResult(RequestSchema)(request).pipe(
+		Result.mapError((cause) =>
+			failure("invalid_request", "Invalid OpenAI Responses request", false, cause),
+		),
+		Result.map((parsed) => {
+			const url = (config.url ?? new URL("https://api.openai.com/v1/responses")).toString()
+			return {
+				url,
+				method: "POST",
+				headers: {
+					authorization: `Bearer ${Redacted.value(config.apiKey)}`,
+					"content-type": "application/json",
+					...(config.organization === undefined
+						? {}
+						: { "openai-organization": config.organization }),
+				},
+				body: requestBody({ ...parsed, model: config.model }),
+			} satisfies EncodedRequest
 		}),
 	)
 
@@ -234,29 +373,3 @@ export const make = (config: unknown): Result.Result<Config, ConfigError> =>
 		Result.mapError((cause) => ConfigError.make({ message: cause.message })),
 		Result.flatMap(validateConfig),
 	)
-
-/** Stable provider capability; credentials and model selection belong to state. */
-export const capability = Capability.make({
-	id: "provider.openai.responses",
-	version: 1,
-	kind: "provider",
-	projections: ["generation"],
-} as const)
-
-type PluginState = { readonly providers: readonly [ReturnType<typeof layer>] }
-
-export type Plugin = RouterPlugin.RouterPlugin<
-	"openai-responses-provider",
-	readonly [typeof capability],
-	PluginState
->
-
-/** Better Auth-style provider plugin. Configuration is captured only in state. */
-export const plugin = (config: unknown): Plugin =>
-	RouterPlugin.make({
-		id: "openai-responses-provider",
-		capabilities: [capability] as const,
-		state: { providers: [layer(config)] as const },
-	})
-
-export const makePlugin = plugin

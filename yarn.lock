@@ -112,6 +112,33 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@better-router/example-sqlite@workspace:examples/sqlite":
+  version: 0.0.0-use.local
+  resolution: "@better-router/example-sqlite@workspace:examples/sqlite"
+  dependencies:
+    "@better-router/core": "workspace:*"
+    "@better-router/persistence-sql": "workspace:*"
+    "@better-router/provider-openai": "workspace:*"
+    "@effect/platform-node": "npm:4.0.0"
+    "@effect/sql-sqlite-node": "npm:4.0.0"
+    "@types/node": "npm:^24.0.0"
+    effect: "npm:4.0.0"
+    tsx: "npm:^4.23.15"
+  languageName: unknown
+  linkType: soft
+
+"@better-router/persistence-sql@workspace:*, @better-router/persistence-sql@workspace:packages/persistence-sql":
+  version: 0.0.0-use.local
+  resolution: "@better-router/persistence-sql@workspace:packages/persistence-sql"
+  dependencies:
+    "@better-router/core": "workspace:*"
+    "@effect/sql-sqlite-node": "npm:4.0.0"
+    effect: "npm:4.0.0"
+  peerDependencies:
+    effect: 4.0.0
+  languageName: unknown
+  linkType: soft
+
 "@better-router/plugin-anthropic-messages@workspace:packages/plugin-anthropic-messages":
   version: 0.0.0-use.local
   resolution: "@better-router/plugin-anthropic-messages@workspace:packages/plugin-anthropic-messages"
@@ -228,6 +255,15 @@ __metadata:
     effect: ^4.0.0
     redis: ">=5.0.0 <7.0.0"
   checksum: 10c0/2657631ede73c0ff55daf6260e9fdfce16c18c98160d5ada7f15f8c92f4fcf3f9b8ce396d7853134f8005969ae71bff0fc8de603037c014f22a1169b1c6c4a9d
+  languageName: node
+  linkType: hard
+
+"@effect/sql-sqlite-node@npm:4.0.0":
+  version: 4.0.0
+  resolution: "@effect/sql-sqlite-node@npm:4.0.0"
+  peerDependencies:
+    effect: ^4.0.0
+  checksum: 10c0/41cface42f08a4c3647dec276d10e7cc5e07f5dc87c1f9a3e530f7b474eea5b0e2904a1adca63f4f759aeccb4cebf2f2e987e4ec23e070fada2e0340000c393b
   languageName: node
   linkType: hard
 

@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Match, Redacted, Result, Schema, Stream } from "effect"
+import { Effect, Exit, Match, Redacted, Result, Schema, Scope, Stream } from "effect"
 import { Sse } from "effect/encoding"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import type {
@@ -11,7 +11,6 @@ import * as Generation from "@better-router/core/Generation"
 import { Request as RequestSchema } from "@better-router/core/GenerationSchema"
 import { Error as ProviderError } from "@better-router/core/Provider"
 import * as Capability from "@better-router/core/Capability"
-import * as RouterPlugin from "@better-router/core/Plugin"
 import { fromNative } from "./GenerationAssembler.js"
 import type { NativeChunk } from "./GenerationAssembler.js"
 
@@ -42,9 +41,39 @@ export interface Service {
 	readonly generate: (request: Request) => Effect.Effect<Process, ProviderError>
 }
 
-export class AnthropicMessages extends Context.Service<AnthropicMessages, Service>()(
-	"BetterRouterAnthropicMessages",
-) {}
+export interface EncodedRequest {
+	readonly url: string
+	readonly method: "POST"
+	readonly headers: Readonly<Record<string, string>>
+	readonly body: Readonly<Record<string, unknown>>
+}
+
+/** Stable endpoint capability; Deployment owns model, credentials, and limits. */
+export const capability: Capability.Capability<
+	"provider.anthropic.messages",
+	"provider",
+	"generation"
+> = Capability.make({
+	id: "provider.anthropic.messages",
+	version: 1,
+	kind: "provider",
+	projections: ["generation"],
+	endpoints: [
+		{
+			id: "messages",
+			parameters: [
+				"input",
+				"instructions",
+				"tools",
+				"stream",
+				"temperature",
+				"top_p",
+				"max_output_tokens",
+			],
+			streaming: true,
+		},
+	],
+} as const)
 
 const failure = (
 	kind: ProviderError["kind"],
@@ -59,7 +88,7 @@ const validateConfig = (config: Config): Result.Result<Config, ConfigError> =>
 		? Result.fail(ConfigError.make({ message: "url must use HTTP(S)" }))
 		: Result.succeed(config)
 
-const statusError = (status: number): ProviderError =>
+export const classifyStatus = (status: number): ProviderError =>
 	Match.value(status).pipe(
 		Match.when(429, () => failure("rate_limited", "Anthropic rate limited the request", true)),
 		Match.whenOr(401, 403, () => failure("unauthorized", "Anthropic authentication failed")),
@@ -72,14 +101,50 @@ const statusError = (status: number): ProviderError =>
 	)
 
 const json = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))
-const record = Schema.Record(Schema.String, Schema.Unknown)
+const nonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+const usageSchema = Schema.Struct({
+	input_tokens: Schema.optional(nonNegativeInt),
+	output_tokens: Schema.optional(nonNegativeInt),
+	cache_read_input_tokens: Schema.optional(nonNegativeInt),
+	cache_creation_input_tokens: Schema.optional(nonNegativeInt),
+})
+const stopReasonSchema = Schema.Literals([
+	"end_turn",
+	"max_tokens",
+	"stop_sequence",
+	"tool_use",
+	"refusal",
+])
+const messageSchema = Schema.Struct({
+	id: Schema.optional(Schema.NonEmptyString),
+	model: Schema.optional(Schema.NonEmptyString),
+	stop_reason: Schema.optional(Schema.NullOr(stopReasonSchema)),
+	usage: Schema.optional(usageSchema),
+})
+const deltaSchema = Schema.Struct({
+	type: Schema.optional(Schema.String),
+	text: Schema.optional(Schema.String),
+	partial_json: Schema.optional(Schema.String),
+	stop_reason: Schema.optional(Schema.NullOr(stopReasonSchema)),
+	usage: Schema.optional(usageSchema),
+})
+const contentBlockSchema = Schema.Struct({
+	type: Schema.optional(Schema.String),
+	id: Schema.optional(Schema.NonEmptyString),
+	name: Schema.optional(Schema.NonEmptyString),
+})
+const errorSchema = Schema.Struct({
+	type: Schema.optional(Schema.String),
+	message: Schema.optional(Schema.String),
+})
 const eventSchema = Schema.Struct({
 	type: Schema.String,
-	message: Schema.optional(record),
-	index: Schema.optional(Schema.Number),
-	delta: Schema.optional(record),
-	content_block: Schema.optional(record),
-	usage: Schema.optional(record),
+	message: Schema.optional(messageSchema),
+	index: Schema.optional(nonNegativeInt),
+	delta: Schema.optional(deltaSchema),
+	content_block: Schema.optional(contentBlockSchema),
+	usage: Schema.optional(usageSchema),
+	error: Schema.optional(errorSchema),
 })
 
 const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined)
@@ -89,6 +154,80 @@ const recordValue = (value: unknown): Readonly<Record<string, unknown>> | undefi
 		? (value as Readonly<Record<string, unknown>>)
 		: undefined
 
+const numberValue = (value: unknown, key: string): number | undefined => {
+	const record = recordValue(value)
+	return typeof record?.[key] === "number" ? record[key] : undefined
+}
+
+const anthropicStopReasons = [
+	"end_turn",
+	"max_tokens",
+	"stop_sequence",
+	"tool_use",
+	"refusal",
+] as const
+
+const isStopReason = (value: string): value is (typeof anthropicStopReasons)[number] =>
+	(anthropicStopReasons as readonly string[]).includes(value)
+
+const anthropicEventTypes = [
+	"message_start",
+	"content_block_start",
+	"content_block_delta",
+	"content_block_stop",
+	"message_delta",
+	"message_stop",
+	"ping",
+	"error",
+] as const
+
+const isEventType = (value: string): value is (typeof anthropicEventTypes)[number] =>
+	(anthropicEventTypes as readonly string[]).includes(value)
+
+const anthropicDeltaTypes = [
+	"text_delta",
+	"input_json_delta",
+	"thinking_delta",
+	"signature_delta",
+	"citations_delta",
+] as const
+
+const isDeltaType = (value: string): value is (typeof anthropicDeltaTypes)[number] =>
+	(anthropicDeltaTypes as readonly string[]).includes(value)
+
+/** Decode provider bytes strictly, including an explicit final decoder flush. */
+const decodeUtf8 = (bytes: Stream.Stream<Uint8Array, unknown>): Stream.Stream<string, unknown> =>
+	Stream.concat(
+		Stream.map(bytes, (chunk) => ({ type: "chunk" as const, chunk })),
+		Stream.succeed({ type: "end" as const }),
+	).pipe(
+		Stream.mapAccumEffect(
+			() => new TextDecoder("utf-8", { fatal: true }),
+			(decoder, entry) =>
+				Effect.try({
+					try: () =>
+						entry.type === "chunk"
+							? ([decoder, [decoder.decode(entry.chunk, { stream: true })]] as const)
+							: ([decoder, [decoder.decode()]] as const),
+					catch: (cause) => cause,
+				}),
+		),
+	)
+
+const streamError = (value: Readonly<Record<string, unknown>> | undefined): ProviderError => {
+	const type = text(value?.type)
+	const message = text(value?.message) ?? "Anthropic returned a stream error"
+	return type === "overloaded_error" || type === "api_error"
+		? failure("unavailable", message, true)
+		: type === "rate_limit_error"
+			? failure("rate_limited", message, true)
+			: type === "authentication_error" || type === "permission_error"
+				? failure("unauthorized", message)
+				: type === "invalid_request_error" || type === "not_found_error"
+					? failure("invalid_request", message)
+					: failure("unknown", message)
+}
+
 type ParserState = {
 	readonly started: boolean
 	readonly id: string
@@ -97,13 +236,14 @@ type ParserState = {
 	readonly tools: readonly string[]
 	readonly blocks: Readonly<Record<string, string>>
 	readonly usage: Generation.GenerationResponse["usage"]
+	readonly finish: Extract<NativeChunk, { readonly type: "finish" }>["reason"] | undefined
+	readonly done: boolean
 }
 
 const nativeEvents = (
 	bytes: Stream.Stream<Uint8Array, unknown>,
 ): Stream.Stream<NativeChunk, ProviderError> => {
-	const frames = bytes.pipe(
-		Stream.decodeText(),
+	const frames = decodeUtf8(bytes).pipe(
 		Stream.pipeThroughChannel(Sse.decode({ maxEventSize: 1024 * 1024 })),
 	)
 	return Stream.concat(
@@ -119,132 +259,285 @@ const nativeEvents = (
 				tools: [],
 				blocks: {},
 				usage: null,
+				finish: undefined,
+				done: false,
 			}),
 			(state, entry) =>
 				entry.type === "end"
-					? Effect.succeed([state, [] as readonly NativeChunk[]] as const)
-					: Effect.gen(function* () {
-							const value = yield* json(entry.frame.data).pipe(
-								Effect.mapError((cause) =>
-									failure("unknown", "Invalid Anthropic SSE JSON", false, cause),
-								),
+					? state.done
+						? Effect.succeed([state, [] as readonly NativeChunk[]] as const)
+						: Effect.fail(
+								failure("unknown", "Anthropic stream ended without message_stop"),
 							)
-							const event = yield* Schema.decodeUnknownEffect(eventSchema)(
-								value,
-							).pipe(
-								Effect.mapError((cause) =>
-									failure("unknown", "Invalid Anthropic event", false, cause),
-								),
+					: state.done
+						? Effect.fail(
+								failure("unknown", "Anthropic emitted an event after message_stop"),
 							)
-							const message = recordValue(event.message)
-							const delta = recordValue(event.delta)
-							const block = recordValue(event.content_block)
-							const identity =
-								event.type === "message_start"
-									? {
-											id: text(message?.id) ?? "anthropic-response",
-											model: text(message?.model) ?? state.model,
-											createdAt: 0,
-										}
-									: {
-											id: state.id || "anthropic-response",
-											model: state.model,
-											createdAt: state.createdAt,
-										}
-							const initial = state.started
-								? []
-								: ([
-										{
-											type: "start" as const,
-											id: identity.id,
-											createdAt: identity.createdAt,
-											model: identity.model,
-										},
-									] satisfies readonly NativeChunk[])
-							const deltaType = text(delta?.type)
-							const textValue = text(delta?.text)
-							const partial = text(delta?.partial_json)
-							const blockIndex =
-								typeof event.index === "number" ? String(event.index) : undefined
-							const toolId =
-								text(block?.id) ??
-								(blockIndex === undefined ? undefined : state.blocks[blockIndex])
-							const toolName = text(block?.name)
-							const toolStart =
-								toolId && !state.tools.includes(toolId)
-									? [
-											{
-												type: "tool_start" as const,
-												id: toolId,
-												name: toolName ?? "function",
-											},
-										]
-									: []
-							const toolDelta =
-								partial && toolId
-									? [{ type: "tool_delta" as const, id: toolId, value: partial }]
-									: []
-							const textChunk =
-								deltaType === "text_delta" && textValue
-									? [{ type: "text" as const, value: textValue }]
-									: []
-							const stopReason =
-								text(delta?.stop_reason) ?? text(message?.stop_reason)
-							const usageValue =
-								recordValue(event.usage) ??
-								recordValue(delta?.usage) ??
-								recordValue(message?.usage)
-							const inputTokens =
-								usageValue && typeof usageValue.input_tokens === "number"
-									? usageValue.input_tokens
-									: (state.usage?.input_tokens ?? 0)
-							const outputTokens =
-								usageValue && typeof usageValue.output_tokens === "number"
-									? usageValue.output_tokens
-									: (state.usage?.output_tokens ?? 0)
-							const usage =
-								usageValue || state.usage
+						: Effect.gen(function* () {
+								const value = yield* json(entry.frame.data).pipe(
+									Effect.mapError((cause) =>
+										failure(
+											"unknown",
+											"Invalid Anthropic SSE JSON",
+											false,
+											cause,
+										),
+									),
+								)
+								const event = yield* Schema.decodeUnknownEffect(eventSchema)(
+									value,
+								).pipe(
+									Effect.mapError((cause) =>
+										failure("unknown", "Invalid Anthropic event", false, cause),
+									),
+								)
+								if (!isEventType(event.type))
+									return yield* Effect.fail(
+										failure(
+											"unknown",
+											`Unsupported Anthropic event type: ${event.type}`,
+										),
+									)
+								if (event.type === "error")
+									return yield* Effect.fail(streamError(event.error))
+								if (event.type === "ping")
+									return [state, [] as readonly NativeChunk[]] as const
+								if (!state.started && event.type !== "message_start")
+									return yield* Effect.fail(
+										failure(
+											"unknown",
+											"Anthropic emitted output before message_start",
+										),
+									)
+								if (state.started && event.type === "message_start")
+									return yield* Effect.fail(
+										failure(
+											"unknown",
+											"Anthropic emitted duplicate message_start",
+										),
+									)
+								if (event.type === "message_stop")
+									return state.finish === undefined
+										? yield* Effect.fail(
+												failure(
+													"unknown",
+													"Anthropic message_stop has no stop reason",
+												),
+											)
+										: ([
+												{ ...state, done: true },
+												[
+													{
+														type: "finish" as const,
+														reason: state.finish,
+														...(state.usage === null
+															? {}
+															: { usage: state.usage }),
+													},
+												],
+											] as const)
+								const message = recordValue(event.message)
+								const delta = recordValue(event.delta)
+								const block = recordValue(event.content_block)
+								if (
+									event.type === "message_start" &&
+									(!text(message?.id) || !text(message?.model))
+								)
+									return yield* Effect.fail(
+										failure(
+											"unknown",
+											"Anthropic message_start has no identity",
+										),
+									)
+								const identity =
+									event.type === "message_start"
+										? {
+												id: text(message?.id) as string,
+												model: text(message?.model) as string,
+												createdAt: 0,
+											}
+										: {
+												id: state.id || "anthropic-response",
+												model: state.model,
+												createdAt: state.createdAt,
+											}
+								const deltaType = text(delta?.type)
+								const textValue = text(delta?.text)
+								const partial = text(delta?.partial_json)
+								const blockIndex =
+									typeof event.index === "number"
+										? String(event.index)
+										: undefined
+								const toolId =
+									text(block?.id) ??
+									(blockIndex === undefined
+										? undefined
+										: state.blocks[blockIndex])
+								const toolName = text(block?.name)
+								const toolStart =
+									toolId && !state.tools.includes(toolId)
+										? [
+												{
+													type: "tool_start" as const,
+													id: toolId,
+													name: toolName ?? "function",
+												},
+											]
+										: []
+								const toolDelta =
+									partial && toolId
+										? [
+												{
+													type: "tool_delta" as const,
+													id: toolId,
+													value: partial,
+												},
+											]
+										: []
+								const textChunk =
+									deltaType === "text_delta" && textValue
+										? [{ type: "text" as const, value: textValue }]
+										: []
+								const stopReason =
+									text(delta?.stop_reason) ?? text(message?.stop_reason)
+								const usageValue =
+									recordValue(event.usage) ??
+									recordValue(delta?.usage) ??
+									recordValue(message?.usage)
+								const initialUsage =
+									usageValue === undefined && state.usage === null
+										? null
+										: (usageValue ?? state.usage)
+								const inputTokens =
+									numberValue(initialUsage, "input_tokens") ??
+									state.usage?.input_tokens ??
+									0
+								const outputTokens =
+									numberValue(initialUsage, "output_tokens") ??
+									state.usage?.output_tokens ??
+									0
+								const cachedTokens =
+									numberValue(initialUsage, "cache_read_input_tokens") ??
+									state.usage?.input_tokens_details.cached_tokens ??
+									0
+								const usage = initialUsage
 									? {
 											input_tokens: inputTokens,
 											output_tokens: outputTokens,
 											total_tokens: inputTokens + outputTokens,
-											input_tokens_details: { cached_tokens: 0 },
+											input_tokens_details: {
+												cached_tokens: cachedTokens,
+											},
 											output_tokens_details: { reasoning_tokens: 0 },
 										}
 									: null
-							const finish: readonly NativeChunk[] = stopReason
-								? [
-										{
-											type: "finish" as const,
-											reason:
-												stopReason === "max_tokens"
-													? "length"
-													: stopReason === "tool_use"
-														? "tool_calls"
-														: "stop",
-											...(usage === null ? {} : { usage }),
-										},
-									]
-								: []
-							return [
-								{
-									started: true,
-									id: identity.id,
-									model: identity.model,
-									createdAt: identity.createdAt,
-									tools:
-										toolId && !state.tools.includes(toolId)
-											? [...state.tools, toolId]
-											: state.tools,
-									blocks:
-										blockIndex && toolId
-											? { ...state.blocks, [blockIndex]: toolId }
-											: state.blocks,
-									usage,
-								},
-								[...initial, ...toolStart, ...toolDelta, ...textChunk, ...finish],
-							]
-						}),
+								const initial = state.started
+									? []
+									: ([
+											{
+												type: "start" as const,
+												id: identity.id,
+												createdAt: identity.createdAt,
+												model: identity.model,
+												...(usage === null ? {} : { usage }),
+											},
+										] satisfies readonly NativeChunk[])
+								if (stopReason !== undefined && !isStopReason(stopReason))
+									return yield* Effect.fail(
+										failure(
+											"unknown",
+											`Unsupported Anthropic stop reason: ${stopReason}`,
+										),
+									)
+								const blockType = text(block?.type)
+								if (
+									event.type === "content_block_start" &&
+									(event.index === undefined ||
+										(blockType !== "text" && blockType !== "tool_use"))
+								)
+									return yield* Effect.fail(
+										failure(
+											"unknown",
+											"Anthropic content block has an unsupported type",
+										),
+									)
+								if (
+									(event.type === "content_block_delta" ||
+										event.type === "content_block_stop") &&
+									event.index === undefined
+								)
+									return yield* Effect.fail(
+										failure(
+											"unknown",
+											"Anthropic content block event has no index",
+										),
+									)
+								if (deltaType !== undefined && !isDeltaType(deltaType))
+									return yield* Effect.fail(
+										failure(
+											"unknown",
+											`Unsupported Anthropic delta type: ${deltaType}`,
+										),
+									)
+								if (
+									event.type === "content_block_delta" &&
+									deltaType === "input_json_delta" &&
+									toolId === undefined
+								)
+									return yield* Effect.fail(
+										failure(
+											"unknown",
+											"Anthropic tool delta precedes its tool block",
+										),
+									)
+								if (
+									event.type === "content_block_delta" &&
+									deltaType === "input_json_delta" &&
+									toolId === undefined
+								)
+									return yield* Effect.fail(
+										failure(
+											"unknown",
+											"Anthropic tool delta precedes its tool block",
+										),
+									)
+								if (
+									event.type === "content_block_start" &&
+									blockType === "tool_use" &&
+									(!toolId || !toolName)
+								)
+									return yield* Effect.fail(
+										failure("unknown", "Anthropic tool block has no identity"),
+									)
+								const finish =
+									stopReason === undefined
+										? state.finish
+										: stopReason === "max_tokens"
+											? ("length" as const)
+											: stopReason === "tool_use"
+												? ("tool_calls" as const)
+												: ("stop" as const)
+								return [
+									{
+										started: true,
+										id: identity.id,
+										model: identity.model,
+										createdAt: identity.createdAt,
+										tools:
+											toolId && !state.tools.includes(toolId)
+												? [...state.tools, toolId]
+												: state.tools,
+										blocks:
+											blockIndex && toolId
+												? { ...state.blocks, [blockIndex]: toolId }
+												: state.blocks,
+										usage,
+										finish,
+										done: false,
+									},
+									[...initial, ...toolStart, ...toolDelta, ...textChunk],
+								]
+							}),
 		),
 		Stream.mapError((cause) =>
 			Schema.is(ProviderError)(cause)
@@ -452,23 +745,19 @@ const requestBody = (
 		}
 	})
 
-const generate = (
-	client: HttpClient.HttpClient,
-	config: Config,
-	request: Request,
-): Effect.Effect<Process, ProviderError> =>
-	Effect.gen(function* () {
-		const parsed = yield* Schema.decodeUnknownEffect(RequestSchema)(request).pipe(
-			Effect.mapError((cause) =>
+const portableRequest = (request: Request): Result.Result<Request, ProviderError> =>
+	Result.gen(function* () {
+		const parsed = yield* Schema.decodeUnknownResult(RequestSchema)(request).pipe(
+			Result.mapError((cause) =>
 				failure("invalid_request", "Invalid generation request", false, cause),
 			),
 		)
 		if (parsed.previous_response_id)
-			return yield* Effect.fail(
+			return yield* Result.fail(
 				failure("unsupported", "Anthropic does not support response continuation"),
 			)
 		if (parsed.include && parsed.include.length > 0)
-			return yield* Effect.fail(
+			return yield* Result.fail(
 				failure("unsupported", "Anthropic does not support response include fields"),
 			)
 		if (
@@ -484,97 +773,121 @@ const generate = (
 			parsed.frequency_penalty != null ||
 			parsed.store
 		)
-			return yield* Effect.fail(
+			return yield* Result.fail(
 				failure("unsupported", "Anthropic cannot represent one or more request options"),
 			)
 		if (parsed.text?.verbosity)
-			return yield* Effect.fail(
+			return yield* Result.fail(
 				failure("unsupported", "Anthropic cannot represent text verbosity"),
 			)
 		if ((parsed.tools ?? []).some((tool) => tool.type === "function" && tool.strict != null))
-			return yield* Effect.fail(
+			return yield* Result.fail(
 				failure("unsupported", "Anthropic does not support function tool strictness"),
 			)
 		if (parsed.temperature != null && (parsed.temperature < 0 || parsed.temperature > 1))
-			return yield* Effect.fail(
+			return yield* Result.fail(
 				failure("invalid_request", "Anthropic temperature must be between 0 and 1"),
 			)
 		if (parsed.top_p != null && (parsed.top_p < 0 || parsed.top_p > 1))
-			return yield* Effect.fail(
+			return yield* Result.fail(
 				failure("invalid_request", "Anthropic top_p must be between 0 and 1"),
 			)
-		const body = yield* Effect.fromResult(requestBody(parsed, config)).pipe(
-			Effect.mapError((error) => failure(error.kind, error.message)),
-		)
-		const version = HttpClientRequest.setHeader(
-			"anthropic-version",
-			config.version ?? "2023-06-01",
-		)
-		const outgoing = HttpClientRequest.post(
-			(config.url ?? new URL("https://api.anthropic.com/v1/messages")).toString(),
-		).pipe(
-			HttpClientRequest.setHeader("x-api-key", Redacted.value(config.apiKey)),
-			HttpClientRequest.setHeader("content-type", "application/json"),
-			HttpClientRequest.bodyJsonUnsafe(body),
-			version,
-		)
-		const response = yield* client
-			.execute(outgoing)
-			.pipe(
-				Effect.mapError((cause) =>
-					failure("unavailable", "Anthropic connection failed", true, cause),
-				),
-			)
-		if (response.status < 200 || response.status >= 300)
-			return yield* Effect.fail(statusError(response.status))
-		const contentType = response.headers["content-type"]?.toLowerCase() ?? ""
-		if (!contentType.startsWith("text/event-stream"))
-			return yield* Effect.fail(
-				failure("unsupported", "Anthropic provider requires an event stream"),
-			)
-		return yield* Generation.Process.make(fromNative(parsed, nativeEvents(response.stream)))
+		return parsed
 	})
 
-export const layer = (
-	config: unknown,
-): Layer.Layer<AnthropicMessages, ConfigError, HttpClient.HttpClient> =>
-	Layer.effect(
-		AnthropicMessages,
+const generate = (
+	client: HttpClient.HttpClient,
+	config: Config,
+	request: Request,
+): Effect.Effect<Process, ProviderError> =>
+	Effect.uninterruptibleMask((restore) =>
 		Effect.gen(function* () {
-			const parsed = yield* Schema.decodeUnknownEffect(ConfigSchema)(config).pipe(
-				Effect.mapError((cause) => ConfigError.make({ message: cause.message })),
-				Effect.flatMap((value) => Effect.fromResult(validateConfig(value))),
+			const requestScope = yield* Scope.make()
+			return yield* restore(
+				Effect.gen(function* () {
+					const parsed = yield* Effect.fromResult(portableRequest(request))
+					const body = yield* Effect.fromResult(requestBody(parsed, config)).pipe(
+						Effect.mapError((error) => failure(error.kind, error.message)),
+					)
+					const version = HttpClientRequest.setHeader(
+						"anthropic-version",
+						config.version ?? "2023-06-01",
+					)
+					const outgoing = HttpClientRequest.post(
+						(config.url ?? new URL("https://api.anthropic.com/v1/messages")).toString(),
+					).pipe(
+						HttpClientRequest.setHeader("x-api-key", Redacted.value(config.apiKey)),
+						HttpClientRequest.setHeader("content-type", "application/json"),
+						HttpClientRequest.bodyJsonUnsafe(body),
+						version,
+					)
+					const response = yield* HttpClient.withScope(client)
+						.execute(outgoing)
+						.pipe(
+							Scope.provide(requestScope),
+							Effect.mapError((cause) =>
+								failure("unavailable", "Anthropic connection failed", true, cause),
+							),
+						)
+					if (response.status < 200 || response.status >= 300)
+						return yield* Effect.fail(classifyStatus(response.status))
+					const contentType = response.headers["content-type"]?.toLowerCase() ?? ""
+					if (!contentType.startsWith("text/event-stream"))
+						return yield* Effect.fail(
+							failure("unsupported", "Anthropic provider requires an event stream"),
+						)
+					const process = yield* Generation.Process.make(
+						fromNative(parsed, nativeEvents(response.stream)).pipe(
+							Stream.onExit((exit) => Scope.close(requestScope, exit)),
+						),
+					)
+					return {
+						...process,
+						cancel: process.cancel.pipe(
+							Effect.andThen(Scope.close(requestScope, Exit.void)),
+						),
+					}
+				}),
+			).pipe(
+				Effect.onExit((exit) =>
+					Exit.isFailure(exit) ? Scope.close(requestScope, exit) : Effect.void,
+				),
 			)
-			const client = yield* HttpClient.HttpClient
-			return { generate: (request: Request) => generate(client, parsed, request) }
 		}),
 	)
 
-/** Stable provider capability; credentials and model selection belong to state. */
-export const capability = Capability.make({
-	id: "provider.anthropic.messages",
-	version: 1,
-	kind: "provider",
-	projections: ["generation"],
-} as const)
+/** Build an executor scoped to one deployment, without a singleton Context service. */
+export const makeService = (config: Config, client: HttpClient.HttpClient): Service => ({
+	generate: (request) => generate(client, config, request),
+})
 
-type PluginState = { readonly providers: readonly [ReturnType<typeof layer>] }
-
-export type Plugin = RouterPlugin.RouterPlugin<
-	"anthropic-messages-provider",
-	readonly [typeof capability],
-	PluginState
->
-
-/** Better Auth-style provider plugin. */
-export const plugin = (config: unknown): Plugin =>
-	RouterPlugin.make({
-		id: "anthropic-messages-provider",
-		capabilities: [capability] as const,
-		state: { providers: [layer(config)] as const },
-	})
-
-export const makePlugin = plugin
+/** Pure request encoding used by transports and contract inspection tools. */
+export const encodeRequest = (
+	config: Config,
+	request: Request,
+): Result.Result<EncodedRequest, ProviderError> =>
+	portableRequest(request).pipe(
+		Result.flatMap((parsed) =>
+			requestBody(parsed, config).pipe(
+				Result.mapError((cause) => failure(cause.kind, cause.message)),
+				Result.map(
+					(body) =>
+						({
+							url: (
+								config.url ?? new URL("https://api.anthropic.com/v1/messages")
+							).toString(),
+							method: "POST",
+							headers: {
+								"x-api-key": Redacted.value(config.apiKey),
+								"anthropic-version": config.version ?? "2023-06-01",
+								"content-type": "application/json",
+							},
+							body,
+						}) satisfies EncodedRequest,
+				),
+			),
+		),
+	)
 
 export const make = (config: unknown): Result.Result<Config, ConfigError> =>
 	Schema.decodeUnknownResult(ConfigSchema)(config).pipe(

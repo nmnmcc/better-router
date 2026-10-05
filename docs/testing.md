@@ -24,7 +24,7 @@ Host fixtures with a shared `Ref` run sequentially; independently created fixtur
 Run project commands inside `devenv`. Runtime commands build workspace exports before running Vitest:
 
 ```sh
-devenv shell -- yarn test:runtime packages/core/test/Router.test.ts
+devenv shell -- yarn test:runtime packages/core/test/RouterComposition.test.ts
 devenv shell -- yarn test-types
 devenv shell -- yarn check
 devenv shell -- yarn generate:openresponses --check

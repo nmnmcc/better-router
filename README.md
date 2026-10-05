@@ -1,37 +1,66 @@
 # Better Router
 
-Better Router is an Effect based model router. It gives every protocol the same
-semantic generation contract while keeping provider credentials, HTTP wire
-formats, and routing policy at their owning boundaries.
+Better Router is an Effect based generation gateway. Public model aliases select
+provider deployments while protocol adapters preserve their own wire formats.
 
-Configuration follows the Better Auth plugin pattern: a plugin declares stable
-capabilities and carries its runtime state separately. `Router.make` validates
-the complete plugin tuple before acquiring any provider or HTTP resource.
-
-The dependency direction is deliberately small:
+Plugins follow the Better Auth object pattern. Stable capabilities, deployment
+configuration, and runtime services are separate: `Router.make` checks the full
+declaration graph and returns a `Result`; `Router.runtime` acquires services and
+scoped resources.
 
 ```text
-protocol Api → Convert → Route → provider Context → Generation.Process
+Plugin declarations → Registry → model route → Deployment
+  → Provider Contract → Generation.Process → protocol projection
 ```
 
-`Generation.Process` represents one live generation. It exposes a semantic
-event stream, a terminal response view, and cancellation. A provider creates a
-process; a protocol consumes its events.
+`Generation.Process` exposes semantic events, a terminal response, and
+cancellation. Routing pipelines, policies, lifecycle hooks, and HTTP adapters use
+the same process for SDK calls and gateway requests.
+
+Declare a public alias independently from its upstream model and credential:
+
+```ts
+import { Router } from "@better-router/core"
+import * as Responses from "@better-router/plugin-openai-responses"
+
+const configured = Router.make({
+	plugins: [
+		Responses.plugin({
+			deployments: [
+				{
+					id: "openai-primary",
+					provider: "openai",
+					model: "private-provider-model",
+					protocol: "responses",
+					credentialRef: "openai-primary-key",
+				},
+			],
+			modelRoutes: [{ model: "chat", deployments: ["openai-primary"] }],
+		}),
+	] as const,
+})
+```
+
+`configured` is a pure `Result`: preflight fails before any Layer starts. After
+checking it, the host acquires `Router.runtime(router)` in a Scope or provides
+`Router.layer(router)`, supplying `HttpClient` and `CredentialResolver` Layers.
+SDK callers use `runtime.generate`; HTTP hosts serve `runtime.http.routes`.
 
 ## Packages
 
-| Package                                           | Responsibility                                                                                                                     |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `@better-router/core`                             | `Capability`, `State`, object `Plugin`, immutable `Registry`, `Generation`, `Route`, provider errors, pure `Convert`, and `Router` |
-| `@better-router/provider-openai`                  | `OpenAIResponses` and `OpenAIChatCompletions` Context services and upstream Layers                                                 |
-| `@better-router/provider-anthropic`               | `AnthropicMessages` Context service and upstream Layer                                                                             |
-| `@better-router/protocol-openai-responses`        | Responses `HttpApi`, wire Schemas, conversions, and HTTP handler Layer                                                             |
-| `@better-router/protocol-openai-chat-completions` | Chat Completions `HttpApi`, wire Schemas, conversions, and HTTP handler Layer                                                      |
-| `@better-router/protocol-anthropic-messages`      | Messages `HttpApi`, wire Schemas, conversions, and HTTP handler Layer                                                              |
-| `@better-router/effect-ai`                        | Effect AI `LanguageModel` Layer backed directly by `Route`                                                                         |
-| `@better-router/plugin-openai-responses`          | Better Auth-style Responses ingress/provider plugin factory                                                                        |
-| `@better-router/plugin-openai-chat-completions`   | Better Auth-style Chat Completions ingress/provider plugin factory                                                                 |
-| `@better-router/plugin-anthropic-messages`        | Better Auth-style Anthropic Messages ingress/provider plugin factory                                                               |
+| Package                                           | Responsibility                                                                                                                |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `@better-router/core`                             | Capabilities, plugin declarations, immutable registry, deployments, routing, lifecycle, persistence ports, and Generation ABI |
+| `@better-router/provider-openai`                  | OpenAI Responses and Chat Completions deployment runtimes                                                                     |
+| `@better-router/provider-anthropic`               | Anthropic Messages deployment runtimes                                                                                        |
+| `@better-router/protocol-openai-responses`        | Responses HTTP API, wire Schemas, conversions, and handler                                                                    |
+| `@better-router/protocol-openai-chat-completions` | Chat Completions HTTP API, wire Schemas, conversions, and handler                                                             |
+| `@better-router/protocol-anthropic-messages`      | Messages HTTP API, wire Schemas, conversions, and handler                                                                     |
+| `@better-router/plugin-openai-responses`          | Responses ingress and deployment plugin factory                                                                               |
+| `@better-router/plugin-openai-chat-completions`   | Chat Completions ingress and deployment plugin factory                                                                        |
+| `@better-router/plugin-anthropic-messages`        | Anthropic Messages ingress and deployment plugin factory                                                                      |
+| `@better-router/persistence-sql`                  | Optional Effect SQL persistence and migrations                                                                                |
+| `@better-router/effect-ai`                        | Effect AI `LanguageModel` backed by router generation                                                                         |
 
 ## Quick start
 
@@ -42,78 +71,29 @@ devenv shell -- yarn install --immutable
 devenv shell -- yarn build
 ```
 
-A route is a map from public model aliases to handlers. A handler selects and
-combines provider services, so failover and health policy stay local to the
-application's route:
-
-```ts
-import { Effect } from "effect"
-import { Route, Router } from "@better-router/core"
-import { OpenAIResponses } from "@better-router/provider-openai"
-import * as ChatCompletions from "@better-router/protocol-openai-chat-completions"
-
-const provider = OpenAIResponses.plugin({ model, apiKey, url })
-const route = Route.plugin({
-	chat: (request: Route.Request) =>
-		Effect.gen(function* () {
-			const openai = yield* OpenAIResponses.OpenAIResponses
-			return yield* openai.generate(request)
-		}),
-})
-
-const program = Effect.gen(function* () {
-	return yield* Router.make({
-		plugins: [route, provider, ChatCompletions.plugin()] as const,
-	})
-})
-```
-
-`Router.make` and `Router.layer` compose object plugin state. Protocol HTTP
-handlers depend on `Route`; they never select a provider directly. The host supplies its
-Effect HTTP server and client Layers, for example:
-
-```ts
-const server = Layer.unwrap(
-	Effect.gen(function* () {
-		const router = yield* Router.make({
-			plugins: [route, provider, ChatCompletions.plugin()] as const,
-		})
-		return HttpRouter.serve(router.http.routes).pipe(
-			Layer.provide(NodeHttpServer.layer(createServer)),
-		)
-	}).pipe(Effect.provide(NodeHttpClient.layerUndici)),
-)
-```
-
-Run the complete quickstart example with provider and gateway credentials:
+Run the quickstart with provider and gateway credentials:
 
 ```sh
 GATEWAY_API_KEY=client OPENAI_API_KEY=provider OPENAI_MODEL=gpt-5-mini \
   devenv shell -- yarn workspace @better-router/example-quickstart start
 ```
 
-It exposes `POST /v1/chat/completions` on `http://127.0.0.1:8787` using the
-public `quickstart` alias. See [all examples](examples/README.md) for
-cross-provider fallback and in-process calls.
+It exposes `POST /v1/chat/completions` and `POST /v1/responses` on
+`http://127.0.0.1:8787` using the public `quickstart` alias. The alias maps to a
+static OpenAI Responses deployment. The host supplies its `HttpClient` and
+`CredentialResolver` Layers; the deployment only contains a credential
+reference.
 
-## Effect AI
-
-The Effect AI adapter is a separate package and calls `Route` in process:
-
-```ts
-import { Effect } from "effect"
-import { LanguageModel } from "effect/ai"
-import { EffectAI } from "@better-router/effect-ai"
-
-const model = EffectAI.model("chat")
-const program = LanguageModel.generateText({ prompt: "Say hello" }).pipe(
-	Effect.provide(model),
-	Effect.provide(router.route),
-)
+```sh
+curl http://127.0.0.1:8787/v1/chat/completions \
+  -H 'Authorization: Bearer client' \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"quickstart","messages":[{"role":"user","content":"Explain model routing in one sentence."}]}'
 ```
 
-It maps portable prompts, tools, structured output, completion, and streaming
-to `Generation.Process`, preserving typed route and provider failures.
+See [all examples](examples/README.md) for cross-provider fallback and in-process
+calls. Fallback may select another deployment before the first semantic event;
+partial output is never replayed.
 
 ## Development
 
@@ -124,7 +104,9 @@ devenv shell -- yarn generate:openresponses --check
 ```
 
 Read [the architecture](docs/architecture.md), [the testing guide](docs/testing.md),
-and [project terminology](CONTEXT.md) for the contracts and boundaries.
+and [project terminology](CONTEXT.md) for contracts and boundaries. The current
+execution domain is Generation; media, embeddings, realtime, and management
+APIs can be added through domain-specific plugins.
 
 ## License
 

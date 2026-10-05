@@ -6,4 +6,7 @@ dist/
 coverage/
 .types/
 *.tsbuildinfo
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 .pre-commit-config.yaml

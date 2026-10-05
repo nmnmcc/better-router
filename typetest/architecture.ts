@@ -1,30 +1,29 @@
-import { Stream } from "effect"
-import { Generation, Route, Router } from "@better-router/core"
-import { OpenAIResponses } from "@better-router/provider-openai"
+import { Effect, Redacted } from "effect"
+import { ProviderContract, Router } from "@better-router/core"
+import * as OpenAI from "@better-router/provider-openai"
 import * as Responses from "@better-router/protocol-openai-responses"
 
-const route = Route.layer({
-	chat: (request: Route.Request<"chat">) => {
-		void request
-		return Generation.Process.make(
-			Stream.succeed({
-				type: "response.completed" as const,
-				sequence_number: 0,
-				response: {} as never,
-			}),
-		)
-	},
+const provider = OpenAI.Deployment.plugin({
+	deployments: [
+		{
+			id: "architecture-openai",
+			provider: "openai",
+			model: "gpt-test",
+			protocol: "responses",
+			credentialRef: "architecture",
+		},
+	],
+	modelRoutes: [{ model: "architecture", deployments: ["architecture-openai"] }],
 })
 
-const provider = OpenAIResponses.layer({
-	model: "gpt-test",
-	apiKey: "secret",
-})
+const protocol = Responses.plugin({ gatewayKey: Redacted.make("gateway") })
+const staticResult = Router.make({ plugins: [provider, protocol] as const })
 
-const composed = Router.make({
-	route,
-	providers: [provider],
-	apis: [Responses.contract],
-})
+const runtime = Effect.fromResult(staticResult).pipe(
+	Effect.flatMap(Router.runtime),
+	Effect.provide(
+		ProviderContract.credentialResolverLayer(() => Effect.succeed(Redacted.make("secret"))),
+	),
+)
 
-void composed
+void runtime

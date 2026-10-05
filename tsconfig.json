@@ -11,8 +11,10 @@
 		{ "path": "packages/protocol-openai-chat-completions" },
 		{ "path": "packages/protocol-anthropic-messages" },
 		{ "path": "packages/effect-ai" },
+		{ "path": "packages/persistence-sql" },
 		{ "path": "examples/quickstart" },
 		{ "path": "examples/failover" },
-		{ "path": "examples/sdk-call" }
+		{ "path": "examples/sdk-call" },
+		{ "path": "examples/sqlite" }
 	]
 }

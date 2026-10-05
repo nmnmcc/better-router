@@ -2,9 +2,9 @@ import { createServer } from "node:http"
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
-import { Route, Router } from "@better-router/core"
-import { AnthropicMessages } from "@better-router/provider-anthropic"
-import { OpenAIResponses } from "@better-router/provider-openai"
+import { Provider, ProviderContract, Router } from "@better-router/core"
+import * as AnthropicProvider from "@better-router/provider-anthropic"
+import * as OpenAI from "@better-router/provider-openai"
 import * as Anthropic from "@better-router/protocol-anthropic-messages"
 import * as ChatCompletions from "@better-router/protocol-openai-chat-completions"
 import { Config, Effect, Layer } from "effect"
@@ -31,40 +31,65 @@ const settings = Config.all({
 const server = Layer.unwrap(
 	Effect.gen(function* () {
 		const config = yield* settings
-		const openAI = OpenAIResponses.plugin({
-			model: config.openAIModel,
-			apiKey: config.openAIKey,
-			url: config.openAIUrl,
-		})
-		const anthropic = AnthropicMessages.plugin({
-			model: config.anthropicModel,
-			apiKey: config.anthropicKey,
-			url: config.anthropicUrl,
-			defaultMaxTokens: config.anthropicMaxTokens,
-		})
-		const route = Route.plugin({
-			[config.publicModel]: (request: Route.Request) =>
-				Effect.gen(function* () {
-					const primary = yield* OpenAIResponses.OpenAIResponses
-					const fallback = yield* AnthropicMessages.AnthropicMessages
-					return yield* primary.generate(request).pipe(
-						Effect.catchIf(
-							(error) => error.retryable,
-							() => fallback.generate(request),
-						),
-					)
-				}),
-		})
-		const router = yield* Router.make({
-			plugins: [
-				route,
-				openAI,
-				anthropic,
-				ChatCompletions.plugin({ gatewayKey: config.gatewayKey }),
-				Anthropic.plugin({ gatewayKey: config.gatewayKey }),
-			] as const,
-		})
-		return HttpRouter.serve(router.http.routes).pipe(
+		const router = yield* Effect.fromResult(
+			Router.make({
+				plugins: [
+					OpenAI.Deployment.plugin({
+						deployments: [
+							{
+								id: "primary-openai",
+								provider: "openai",
+								model: config.openAIModel,
+								protocol: "responses",
+								credentialRef: "openai",
+								baseUrl: config.openAIUrl.toString(),
+							},
+						],
+						modelRoutes: [
+							{
+								model: config.publicModel,
+								deployments: ["primary-openai"],
+								fallback: ["fallback-anthropic"],
+								retry: { maxAttempts: 2 },
+							},
+						],
+					}),
+					AnthropicProvider.Deployment.plugin({
+						deployments: [
+							{
+								id: "fallback-anthropic",
+								provider: "anthropic",
+								model: config.anthropicModel,
+								protocol: "messages",
+								credentialRef: "anthropic",
+								baseUrl: config.anthropicUrl.toString(),
+								defaultMaxTokens: config.anthropicMaxTokens,
+							},
+						],
+					}),
+					ChatCompletions.plugin({ gatewayKey: config.gatewayKey }),
+					Anthropic.plugin({ gatewayKey: config.gatewayKey }),
+				] as const,
+			}),
+		)
+		const runtime = yield* Router.runtime(router).pipe(
+			Effect.provide(
+				ProviderContract.credentialResolverLayer((reference) =>
+					reference === "openai"
+						? Effect.succeed(config.openAIKey)
+						: reference === "anthropic"
+							? Effect.succeed(config.anthropicKey)
+							: Effect.fail(
+									Provider.Error.make({
+										kind: "unauthorized",
+										message: `Unknown credential reference: ${reference}`,
+										retryable: false,
+									}),
+								),
+				),
+			),
+		)
+		return HttpRouter.serve(runtime.http.routes).pipe(
 			Layer.provide(
 				NodeHttpServer.layer(createServer, {
 					host: config.host,
@@ -72,7 +97,7 @@ const server = Layer.unwrap(
 				}),
 			),
 		)
-	}).pipe(Effect.provide(NodeHttpClient.layerUndici)),
-)
+	}),
+).pipe(Layer.provide(NodeHttpClient.layerUndici))
 
 Layer.launch(server).pipe(NodeRuntime.runMain)

@@ -1,4 +1,4 @@
-import { Clock, Effect, Match, Option, Result, Stream } from "effect"
+import { Clock, Effect, HashMap, Match, Option, Result, Stream } from "effect"
 import type {
 	GenerationEvent,
 	GenerationOutputItem,
@@ -103,7 +103,7 @@ type State = Readonly<{
 	finished: boolean
 	messageIndex: Option.Option<number>
 	output: readonly GenerationOutputItem[]
-	tools: Readonly<Record<string, number>>
+	tools: HashMap.HashMap<string, number>
 }>
 type UnnumberedEvent = { readonly type: string; readonly [key: string]: unknown }
 
@@ -113,7 +113,7 @@ const initial = (): State => ({
 	finished: false,
 	messageIndex: Option.none(),
 	output: [],
-	tools: {},
+	tools: HashMap.empty(),
 })
 
 const emit = (
@@ -237,7 +237,7 @@ const transition = (
 						state.finished ||
 						!value.id ||
 						!value.name ||
-						state.tools[value.id] !== undefined
+						HashMap.has(state.tools, value.id)
 					)
 						return yield* Result.fail(invalid("Duplicate or invalid tool call"))
 					const identity = yield* Result.fromOption(state.identity, () =>
@@ -256,7 +256,7 @@ const transition = (
 						{
 							...state,
 							output: [...state.output, item],
-							tools: { ...state.tools, [value.id]: index },
+							tools: HashMap.set(state.tools, value.id, index),
 						},
 						[{ type: "response.output_item.added", output_index: index, item }],
 					)
@@ -265,9 +265,9 @@ const transition = (
 				Result.gen(function* () {
 					if (state.finished)
 						return yield* Result.fail(invalid("Events followed the terminal response"))
-					const index = state.tools[value.id]
-					if (index === undefined)
-						return yield* Result.fail(invalid("Tool arguments before tool call"))
+					const index = yield* Result.fromOption(HashMap.get(state.tools, value.id), () =>
+						invalid("Tool arguments before tool call"),
+					)
 					const item = state.output[index]
 					if (item.type !== "function_call")
 						return yield* Result.fail(invalid("Invalid tool state"))

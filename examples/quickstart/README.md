@@ -1,6 +1,8 @@
 # Quickstart
 
-Expose a Chat Completions endpoint backed by an OpenAI Responses deployment.
+Expose Chat Completions and Responses endpoints backed by one OpenAI Responses
+deployment. The public alias and private provider model are static declarations;
+the host resolves the deployment's credential reference at startup.
 
 ```sh
 devenv shell -- yarn build

@@ -2,8 +2,8 @@ import { createServer } from "node:http"
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
-import { Route, Router } from "@better-router/core"
-import { OpenAIResponses } from "@better-router/provider-openai"
+import { ProviderContract, Router } from "@better-router/core"
+import * as OpenAI from "@better-router/provider-openai"
 import * as ChatCompletions from "@better-router/protocol-openai-chat-completions"
 import * as Responses from "@better-router/protocol-openai-responses"
 import { Config, Effect, Layer } from "effect"
@@ -24,27 +24,35 @@ const settings = Config.all({
 const server = Layer.unwrap(
 	Effect.gen(function* () {
 		const config = yield* settings
-		const provider = OpenAIResponses.plugin({
-			model: config.upstreamModel,
-			apiKey: config.apiKey,
-			url: config.url,
-		})
-		const route = Route.plugin({
-			[config.publicModel]: (request: Route.Request) =>
-				Effect.gen(function* () {
-					const openai = yield* OpenAIResponses.OpenAIResponses
-					return yield* openai.generate(request)
-				}),
-		})
-		const router = yield* Router.make({
-			plugins: [
-				route,
-				provider,
-				ChatCompletions.plugin({ gatewayKey: config.gatewayKey }),
-				Responses.plugin({ gatewayKey: config.gatewayKey }),
-			] as const,
-		})
-		return HttpRouter.serve(router.http.routes).pipe(
+		const router = yield* Effect.fromResult(
+			Router.make({
+				plugins: [
+					OpenAI.Deployment.plugin({
+						deployments: [
+							{
+								id: "quickstart-openai",
+								provider: "openai",
+								model: config.upstreamModel,
+								protocol: "responses",
+								credentialRef: "openai",
+								baseUrl: config.url.toString(),
+							},
+						],
+						modelRoutes: [
+							{ model: config.publicModel, deployments: ["quickstart-openai"] },
+						],
+					}),
+					ChatCompletions.plugin({ gatewayKey: config.gatewayKey }),
+					Responses.plugin({ gatewayKey: config.gatewayKey }),
+				] as const,
+			}),
+		)
+		const runtime = yield* Router.runtime(router).pipe(
+			Effect.provide(
+				ProviderContract.credentialResolverLayer(() => Effect.succeed(config.apiKey)),
+			),
+		)
+		return HttpRouter.serve(runtime.http.routes).pipe(
 			Layer.provide(
 				NodeHttpServer.layer(createServer, {
 					host: config.host,
@@ -52,7 +60,7 @@ const server = Layer.unwrap(
 				}),
 			),
 		)
-	}).pipe(Effect.provide(NodeHttpClient.layerUndici)),
-)
+	}),
+).pipe(Layer.provide(NodeHttpClient.layerUndici))
 
 Layer.launch(server).pipe(NodeRuntime.runMain)

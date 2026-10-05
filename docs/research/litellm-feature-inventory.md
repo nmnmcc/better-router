@@ -1,40 +1,43 @@
 # LiteLLM 功能盘点与 plugin 缺口
 
-调研日期：2026-09-27
+LiteLLM 调研日期：2026-09-27；better-router 契约说明更新于 2026-10-05。
 
-LiteLLM 源码依据是仓库镜像提交 [`09ebb28473e6e9e09c80ce2f822b88d8bc24f2e4`](https://github.com/BerriAI/litellm/tree/09ebb28473e6e9e09c80ce2f822b88d8bc24f2e4)。本文件把 LiteLLM Python SDK、OSS Proxy/Gateway 的公开能力映射到 better-router 当前的 `RouterPlugin` 契约；LiteLLM Commercial License 中未公开的实现只作为边界说明，不把它当作 OSS plugin 的验收项
+LiteLLM 源码依据是仓库镜像提交 [`09ebb28473e6e9e09c80ce2f822b88d8bc24f2e4`](https://github.com/BerriAI/litellm/tree/09ebb28473e6e9e09c80ce2f822b88d8bc24f2e4)。本文件把 LiteLLM Python SDK、OSS Proxy/Gateway 的公开能力映射到 better-router 的显式对象 `RouterPlugin` 契约；LiteLLM Commercial License 中未公开的实现只作为边界说明，不把它当作 OSS plugin 的验收项。
 
 ## 结论
 
-当前 better-router 已有三个协议插件：OpenAI Chat Completions、OpenAI Responses、Anthropic Messages。它们覆盖了 LiteLLM 的三条主调用面，但还没有 LiteLLM 的其他端点、Provider 部署适配器、Proxy 管理面或横切能力。依据 LiteLLM 的官方端点索引和 Proxy 路由注册，完整 OSS parity 至少需要下面四层能力：
+当前 better-router 已有三个 Generation 协议插件：OpenAI Chat Completions、OpenAI Responses、Anthropic Messages。插件重构将 OpenAI/Anthropic deployment factory、候选路由、生命周期、运行时健康状态和持久化服务接入同一声明体系；其范围仍是 Generation 网关闭环。其他执行域、完整 Provider 目录和 LiteLLM Proxy 管理面仍未实现。依据 LiteLLM 的官方端点索引和 Proxy 路由注册，完整 OSS parity 至少需要下面四层能力：
 
 1. **端点 plugin**：补齐 OpenAI 兼容的 Completions、Embeddings、Audio、Images、Moderations、Batches、Files、Fine-tuning、Realtime、Videos、Containers、Vector Stores、Evals，以及 Responses 的对象管理和 token/compact 操作
 2. **非 OpenAI 协议 plugin**：A2A Agent、MCP Gateway、Search/grounding、OCR、RAG、Memory、Anthropic token counting/Skills、Gemini/Bedrock 原生端点和各类 pass-through
 3. **Provider deployment plugin**：LiteLLM 官方 README 声称支持 100+ LLM；镜像的 `litellm/llms/` 有 137 个顶层目录（其中包含 `base_llm` 和 `deprecated_providers`），每个部署需要认证、请求转换、流式事件、错误分类、能力声明和成本计算
 4. **Gateway 横切 plugin/service**：路由重试和 fallback、健康检查、缓存、Guardrails/Policy、虚拟 key 和 RBAC、预算和 spend、回调/OTel/Prometheus、配置/密钥、模型管理、审计/合规和可观测管理端点
 
-当前 core 的 plugin 在路由创建时声明 `deployments`、`policies`、`middleware`、`projections`、`http` 和资源 `start` effect（见 [`Plugin.ts`](../../packages/core/src/Plugin.ts)）。因此下面的“建议 plugin”是按 API/资源边界拆出的候选包，不要求每一行都变成独立 npm package；同一协议的管理端点和执行器可以共用一个 package，但不能把 Provider 特有语义藏在通用转换器中
+当前 core 的 plugin 在路由创建时通过 `config` 声明 `providers`、`deployments`、`modelRoutes`、`policies`、`pipelines`、`middleware`、`hooks`、`projections`、`http` 和 `persistence`；`layer`/`init` 只负责注入或取得运行时服务，不能追加静态声明（见 [`Plugin.ts`](../../packages/core/src/Plugin.ts) 与 [`PluginContributions.ts`](../../packages/core/src/PluginContributions.ts)）。`Router.make` 以 `Result` 完成纯静态 preflight，`Router.runtime`/`Router.layer` 才组合 scoped runtime Layer；凭证由共享的 [`CredentialResolver`](../../packages/core/src/ProviderContract.ts) 按引用解析。下面的“建议 plugin”是按 API/资源边界拆出的候选包，不要求每一行都变成独立 npm package；同一协议的管理端点和执行器可以共用一个 package，但不能把 Provider 特有语义藏在通用转换器中。
 
 ## 当前基线
 
-| 能力                                 | 当前实现                                             | 证据                                                                                                                                                                                                                     |
-| ------------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Chat Completions ingress/upstream    | 已有 `@better-router/plugin-openai-chat-completions` | [`packages/plugin-openai-chat-completions`](../../packages/plugin-openai-chat-completions)、架构说明 [`docs/architecture.md`](../architecture.md)                                                                        |
-| Responses ingress/upstream           | 已有 `@better-router/plugin-openai-responses`        | [`packages/plugin-openai-responses`](../../packages/plugin-openai-responses)、LiteLLM Responses 路由 [`response_api_endpoints/endpoints.py`](../../references/litellm/litellm/proxy/response_api_endpoints/endpoints.py) |
-| Anthropic Messages ingress/upstream  | 已有 `@better-router/plugin-anthropic-messages`      | [`packages/plugin-anthropic-messages`](../../packages/plugin-anthropic-messages)、LiteLLM Anthropic 路由 [`anthropic_endpoints/endpoints.py`](../../references/litellm/litellm/proxy/anthropic_endpoints/endpoints.py)   |
-| 原生事件 IR、路由、fallback 前置边界 | 已有 router core，但只提供当前三类协议的转换         | [`packages/core/src/Router.ts`](../../packages/core/src/Router.ts)、[`docs/architecture.md`](../architecture.md)                                                                                                         |
+| 能力                                | 当前实现                                                             | 证据                                                                                                                                                                                                                                                 |
+| ----------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat Completions ingress/upstream   | 已有 `@better-router/plugin-openai-chat-completions`                 | [`packages/plugin-openai-chat-completions`](../../packages/plugin-openai-chat-completions)、架构说明 [`docs/architecture.md`](../architecture.md)                                                                                                    |
+| Responses ingress/upstream          | 已有 `@better-router/plugin-openai-responses`                        | [`packages/plugin-openai-responses`](../../packages/plugin-openai-responses)、LiteLLM Responses 路由 [`response_api_endpoints/endpoints.py`](../../references/litellm/litellm/proxy/response_api_endpoints/endpoints.py)                             |
+| Anthropic Messages ingress/upstream | 已有 `@better-router/plugin-anthropic-messages`                      | [`packages/plugin-anthropic-messages`](../../packages/plugin-anthropic-messages)、LiteLLM Anthropic 路由 [`anthropic_endpoints/endpoints.py`](../../references/litellm/litellm/proxy/anthropic_endpoints/endpoints.py)                               |
+| Generation ABI 与 process           | 协议无关 request/response/event，取消与终态重建                      | [`Generation.ts`](../../packages/core/src/Generation.ts)、[`GenerationProcess.ts`](../../packages/core/src/GenerationProcess.ts)                                                                                                                     |
+| Provider 与多 Deployment            | OpenAI Responses/Chat、Anthropic Messages 的独立 runtime factory     | [`ProviderContract.ts`](../../packages/core/src/ProviderContract.ts)、[`provider-openai/Deployment.ts`](../../packages/provider-openai/src/Deployment.ts)、[`provider-anthropic/Deployment.ts`](../../packages/provider-anthropic/src/Deployment.ts) |
+| 候选路由与生命周期                  | 有序 policy/pipeline、strategy、hooks、middleware、首事件前 fallback | [`Routing.ts`](../../packages/core/src/Routing.ts)、[`Policies.ts`](../../packages/core/src/Policies.ts)、[`Hooks.ts`](../../packages/core/src/Hooks.ts)                                                                                             |
+| 运行时状态与持久化                  | memory state port 与独立 SQL companion，数据库由宿主 Layer 注入      | [`RoutingRuntime.ts`](../../packages/core/src/RoutingRuntime.ts)、[`Persistence.ts`](../../packages/core/src/Persistence.ts)、[`persistence-sql`](../../packages/persistence-sql)                                                                    |
 
 LiteLLM 的 README 将 Proxy 的关键能力概括为统一 API、100+ 模型、virtual keys、spend tracking、Guardrails、load balancing 和 admin dashboard，并把 `/chat/completions`、`/responses`、`/embeddings`、`/images`、`/audio`、`/batches`、`/rerank`、`/a2a`、`/messages` 列为端点示例（[README](https://github.com/BerriAI/litellm/blob/09ebb28473e6e9e09c80ce2f822b88d8bc24f2e4/README.md#what-is-litellm)，[Features](https://github.com/BerriAI/litellm/blob/09ebb28473e6e9e09c80ce2f822b88d8bc24f2e4/README.md#features)）
 
 ### 当前 core 的结构性缺口
 
-better-router 当前的 `generation` capability 定义了 [`GenerationRequest`](../../packages/core/src/Generation.ts)、[`GenerationResponse`](../../packages/core/src/Generation.ts) 和 [`GenerationEvent`](../../packages/core/src/Generation.ts) 语义 ABI；它不再依赖某个 wire 规范。现有 [`Deployment`](../../packages/core/src/Deployment.ts) 的 generation executor 仍是 `GenerationRequest -> Stream<GenerationEvent>`，上游 transport 只有 HTTP/WebSocket（[`Deployment.ts`](../../packages/core/src/Deployment.ts)）。这对三类文本/工具协议足够，但不能直接表达 embeddings 数组、audio/video binary、multipart 文件、异步 batch/fine-tuning job、vector-store CRUD 或 provider-native search/OCR 结果；这些应由插件注册新的 capability 与专属 execution value，而不是扩张 generation ABI
+better-router 当前的 `generation` capability 定义了 [`GenerationRequest`](../../packages/core/src/Generation.ts)、[`GenerationResponse`](../../packages/core/src/Generation.ts) 和 [`GenerationEvent`](../../packages/core/src/Generation.ts) 语义 ABI；它不依赖某个 wire 规范。Provider 的静态 endpoint 矩阵和 runtime factory 由 [`ProviderContract`](../../packages/core/src/ProviderContract.ts) 描述，具体部署通过 [`DeploymentConfig`](../../packages/core/src/Deployment.ts) 建立，生成过程由 [`Generation.Process`](../../packages/core/src/GenerationProcess.ts) 建模；健康、并发和 cooldown 等运行时指标由 [`RoutingRuntime`](../../packages/core/src/RoutingRuntime.ts) 管理。这一代实现只闭合 Generation 三类文本/工具协议，不能直接表达 embeddings 数组、audio/video binary、multipart 文件、异步 batch/fine-tuning job、vector-store CRUD 或 provider-native search/OCR 结果；这些应由后续插件注册新的 capability 与专属 execution value，而不是扩张 generation ABI。
 
-HTTP plugin 可以通过 [`HttpContribution`](../../packages/core/src/Http.ts#L7-L14) 添加 typed API 和 raw route，但当前 `HttpHostServices` 没有针对 multipart、binary、WebSocket session/job polling 的统一领域结果；因此 endpoint plugin 需要自己的 Schema/资源服务，或先扩展 core 的协议无关 capability。当前 [`Plugin.ts`](../../packages/core/src/Plugin.ts#L9-L21) 只能静态声明 deployments/policies/middleware/projections/http 和 acquisition effect，不能在运行时追加 LiteLLM 那种动态 model/key/tool registry。仓库架构文档也明确当前只支持 Chat、Responses、Anthropic 三个 HTTP endpoint（[`docs/architecture.md`](../architecture.md#protocol-adapters)）
+HTTP plugin 通过 [`HttpContribution`](../../packages/core/src/PluginContributions.ts) 注册 typed `HttpApi` contract 和 route Layer；当前 `HttpHostServices` 没有针对 multipart、binary、WebSocket session/job polling 的统一领域结果，因此非 Generation endpoint plugin 需要自己的 Schema/资源服务，或先扩展 core 的协议无关 capability。当前插件只接受显式对象或工厂结果，不在 Router 内动态加载 npm/config specifier，也不允许运行时追加 LiteLLM 那种 model/key/tool registry。仓库架构文档也明确本轮只支持 Chat、Responses、Anthropic 三个 Generation HTTP endpoint（[`docs/architecture.md`](../architecture.md#hooks-middleware-and-http)）。
 
 ## 端点与协议 plugin
 
-下表中的 P0 表示 OpenAI 客户端兼容或基本 Gateway 能力，P1 表示常用的扩展 API，P2 表示旧版或较窄场景。LiteLLM 官方端点索引是总目录，[`proxy_server.py` 的 `include_router`](https://github.com/BerriAI/litellm/blob/09ebb28473e6e9e09c80ce2f822b88d8bc24f2e4/litellm/proxy/proxy_server.py#L19447-L19505) 是实际 OSS Proxy 注册清单
+下表中的 P0/P1/P2 是原 LiteLLM parity 盘点的建议优先级，不是本轮 Generation 重构的交付清单；所有“新增”行仍是未实现的后续候选。P0 表示 OpenAI 客户端兼容或基本 Gateway 能力，P1 表示常用扩展，P2 表示旧版或较窄场景。LiteLLM 官方端点索引是总目录，[`proxy_server.py` 的 `include_router`](https://github.com/BerriAI/litellm/blob/09ebb28473e6e9e09c80ce2f822b88d8bc24f2e4/litellm/proxy/proxy_server.py#L19447-L19505) 是实际 OSS Proxy 注册清单。
 
 | 建议 plugin（候选名）              | LiteLLM 功能/路由                                                                                                                               | 当前状态                        | 需要实现的主要契约                                                                                          | 一手来源                                                                                                                                                                                                                                                                                                                                                                               |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -66,7 +69,7 @@ HTTP plugin 可以通过 [`HttpContribution`](../../packages/core/src/Http.ts#L7
 
 ### 端点之外的 SDK 能力
 
-LiteLLM SDK 还公开同步/异步 completion、统一异常、token counter、模型成本和 Provider 参数能力查询。它们应成为 core service 或独立 `plugin-sdk-utilities`，不能只实现 HTTP ingress，否则 in-process `router.invoke` 与 Proxy 的成本/usage 会不一致。主要来源是 [`litellm/main.py`](../../references/litellm/litellm/main.py)、[`litellm_core_utils/token_counter.py`](../../references/litellm/litellm/litellm_core_utils/token_counter.py)、[`get_model_cost_map.py`](../../references/litellm/litellm/litellm_core_utils/get_model_cost_map.py)、[`get_supported_openai_params.py`](../../references/litellm/litellm/litellm_core_utils/get_supported_openai_params.py)
+LiteLLM SDK 还公开同步/异步 completion、统一异常、token counter、模型成本和 Provider 参数能力查询。它们应成为 core service 或独立 `plugin-sdk-utilities`，不能只实现 HTTP ingress，否则 in-process `runtime.generate` 与 Proxy 的成本/usage 会不一致。主要来源是 [`litellm/main.py`](../../references/litellm/litellm/main.py)、[`litellm_core_utils/token_counter.py`](../../references/litellm/litellm/litellm_core_utils/token_counter.py)、[`get_model_cost_map.py`](../../references/litellm/litellm/litellm_core_utils/get_model_cost_map.py)、[`get_supported_openai_params.py`](../../references/litellm/litellm/litellm_core_utils/get_supported_openai_params.py)。
 
 ## Provider deployment plugin
 
@@ -87,7 +90,7 @@ LiteLLM README 在该固定提交的 Provider 表中列出 **106 个表格行**�
 | Media and document                | ElevenLabs/Deepgram/Soniox/AssemblyAI、Fal/Runway/Stability/Recraft、OCR providers         | `plugin-provider-media` and `plugin-provider-ocr`：binary/multipart, long-running jobs, MIME and file safety                            | [`llms/base_llm/audio_transcription`](../../references/litellm/litellm/llms/base_llm/audio_transcription)、[`llms/base_llm/videos`](../../references/litellm/litellm/llms/base_llm/videos)、[`llms/base_llm/ocr`](../../references/litellm/litellm/llms/base_llm/ocr) |
 | Sandbox/vector backends           | E2B/OpenSandbox、pgvector/Milvus/MongoDB/S3/Valkey vector stores                           | `plugin-provider-managed-resources`：resource ownership, file lifecycle, polling and tenant isolation                                   | [`llms/base_llm/sandbox`](../../references/litellm/litellm/llms/base_llm/sandbox)、[`llms/base_llm/vector_store`](../../references/litellm/litellm/llms/base_llm/vector_store)                                                                                        |
 
-每个 deployment 至少要公开：private model alias、Provider/auth configuration、supported modes/parameters、request transformation、stream/event parser、status-to-`ProviderError` mapping、usage/cost extraction、health check 和 cancellation。当前 OpenAI Chat plugin 的 deployment 只接受一个 OpenAI-shaped URL/key/model（见 [`OpenAIChatCompletionsUpstream.ts`](../../packages/plugin-openai-chat-completions/src/OpenAIChatCompletionsUpstream.ts)），因此不能替代上述 Provider plugin
+每个 deployment 至少要公开：private model identifier、Provider/auth configuration、supported modes/parameters、request transformation、stream/event parser、status-to-`ProviderError` mapping、usage/cost extraction、health check 和 cancellation。当前 OpenAI/Anthropic provider contract 已按 deployment factory 取得独立 runtime，并通过共享 `CredentialResolver` 解析 credential reference（见 [`provider-openai/Deployment.ts`](../../packages/provider-openai/src/Deployment.ts)、[`provider-anthropic/Deployment.ts`](../../packages/provider-anthropic/src/Deployment.ts)）；这只覆盖 Generation，不替代下表提出的完整 Provider plugin 族。
 
 ## Gateway 横切 plugin/service
 
@@ -109,13 +112,14 @@ LiteLLM README 在该固定提交的 Provider 表中列出 **106 个表格行**�
 
 LiteLLM Proxy 的真实路由注册同时包含这些管理面：health、key/user/team/org/customer、spend、cache、analytics、callbacks、budgets、model/access groups、auto-router、tags、workflows、memory、plugins 和 enterprise hooks（见 [`proxy_server.py#L19465-L19503`](https://github.com/BerriAI/litellm/blob/09ebb28473e6e9e09c80ce2f822b88d8bc24f2e4/litellm/proxy/proxy_server.py#L19465-L19503)）。所以只新增模型端点 plugin 仍不能称为 LiteLLM Proxy parity
 
-## 推荐落地顺序
+## 本轮与后续落地边界
 
-1. **P0 调用面**：先抽出 `plugin-openai-completions`、`plugin-openai-embeddings`、`plugin-openai-audio`、`plugin-openai-images`、`plugin-openai-batches`、`plugin-openai-files`、`plugin-openai-realtime`，并把 Responses 管理操作合并回现有 Responses plugin
-2. **P0 Provider**：实现 `plugin-provider-openai-compatible`，再实现 AWS/Azure/Google/Anthropic 四个部署族；每个族先覆盖 chat/completion/embeddings/responses/messages 的能力声明和错误/usage/cost，再扩展媒体和 managed resources
-3. **P0 Gateway 基础**：实现 auth、model registry、routing/fallback/health、spend/budget、observability。它们是所有 endpoint plugin 的共享要求，应该通过 core service requirements 注入，而不是复制到每个 endpoint
-4. **P1 扩展**：vector stores、rerank、fine-tuning、videos、containers、A2A、MCP、search、OCR、RAG、memory、Guardrails/policy、cache、prompt management
-5. **P2 兼容面**：legacy Assistants、全部 provider pass-through、原生 Gemini/Bedrock/Interactions、admin analytics/UI、SCIM/SSO/compliance 和 enterprise-only hooks
+1. **本轮 Generation 基础**：三个协议入口、OpenAI/Anthropic deployment factory、不可变 Registry preflight、异步候选路由、strategy、首事件前 fallback、生命周期 hooks/middleware、memory 与 SQL persistence port。能力声明、静态部署配置和运行时服务分开；同一 Provider 的多个 deployment 不共享 singleton service。
+2. **后续执行域**：Completions、Embeddings、Audio、Images、Batches、Files、Realtime 等必须先定义各自 Schema 与 execution value，再接入插件配置；不能靠 Generation 文本事件模拟。
+3. **后续 Provider**：扩展 OpenAI-compatible、AWS、Azure、Google 等部署族的真实认证、请求转换、错误/usage 与能力矩阵，覆盖本盘点中的 endpoint × deployment 组合。
+4. **后续管理面**：virtual keys、RBAC/SSO、租户预算、模型 CRUD、cache/guardrail 服务、admin analytics、SCIM 和 compliance 都需要独立的领域契约。当前 hooks 与 persistence 是其接入口，不能据此声称已实现 LiteLLM 控制面。
+
+本轮不实现动态 npm/config plugin loader、hot reload 或运行时追加 declarations。完整 parity 验收仍需下面列出的协议与平台边界。
 
 ## 兼容性验收边界
 

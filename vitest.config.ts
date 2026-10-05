@@ -14,7 +14,7 @@ export default defineConfig({
 			exclude: [
 				"**/dist/index.mjs",
 				"**/dist/rolldown-runtime-*.mjs",
-				"packages/core/dist/OpenResponses.mjs",
+				"packages/protocol-openai-responses/dist/OpenResponses.mjs",
 			],
 		},
 	},

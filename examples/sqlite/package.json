@@ -1,0 +1,21 @@
+{
+	"name": "@better-router/example-sqlite",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"start": "tsx src/main.ts"
+	},
+	"dependencies": {
+		"@better-router/core": "workspace:*",
+		"@better-router/persistence-sql": "workspace:*",
+		"@better-router/provider-openai": "workspace:*",
+		"@effect/platform-node": "4.0.0",
+		"@effect/sql-sqlite-node": "4.0.0",
+		"effect": "4.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "^24.0.0",
+		"tsx": "^4.23.15"
+	}
+}

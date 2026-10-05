@@ -1,7 +1,7 @@
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
-import { Route, Router } from "@better-router/core"
-import { OpenAIResponses } from "@better-router/provider-openai"
+import { ProviderContract, Router } from "@better-router/core"
+import * as OpenAI from "@better-router/provider-openai"
 import { Config, Effect, Match } from "effect"
 
 const settings = Config.all({
@@ -15,20 +15,31 @@ const settings = Config.all({
 
 const program = Effect.gen(function* () {
 	const config = yield* settings
-	const provider = OpenAIResponses.plugin({
-		model: config.upstreamModel,
-		apiKey: config.apiKey,
-		url: config.url,
-	})
-	const route = Route.plugin({
-		[config.publicModel]: (request: Route.Request) =>
-			Effect.gen(function* () {
-				const openai = yield* OpenAIResponses.OpenAIResponses
-				return yield* openai.generate(request)
-			}),
-	})
-	const router = yield* Router.make({ plugins: [route, provider] as const })
-	const process = yield* router.generate({
+	const router = yield* Effect.fromResult(
+		Router.make({
+			plugins: [
+				OpenAI.Deployment.plugin({
+					deployments: [
+						{
+							id: "sdk-openai",
+							provider: "openai",
+							model: config.upstreamModel,
+							protocol: "responses",
+							credentialRef: "openai",
+							baseUrl: config.url.toString(),
+						},
+					],
+					modelRoutes: [{ model: config.publicModel, deployments: ["sdk-openai"] }],
+				}),
+			] as const,
+		}),
+	)
+	const runtime = yield* Router.runtime(router).pipe(
+		Effect.provide(
+			ProviderContract.credentialResolverLayer(() => Effect.succeed(config.apiKey)),
+		),
+	)
+	const process = yield* runtime.generate({
 		model: config.publicModel,
 		input: "Give me one practical tip for designing a model router.",
 	})

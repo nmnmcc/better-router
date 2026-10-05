@@ -3,4 +3,5 @@ export * as Convert from "@better-router/protocol-openai-chat-completions/Conver
 export * as Http from "@better-router/protocol-openai-chat-completions/Http"
 export * as OpenAIChatCompletions from "@better-router/provider-openai/OpenAIChatCompletions"
 export * as Deployment from "@better-router/provider-openai/Deployment"
+export * as OpenAIChatCompletionsPlugin from "./OpenAIChatCompletionsPlugin.js"
 export * from "./OpenAIChatCompletionsPlugin.js"

@@ -1,4 +1,16 @@
-import { Context, Effect, Layer, Match, Redacted, Result, Schema, Stream } from "effect"
+import {
+	Effect,
+	Exit,
+	HashMap,
+	Match,
+	Option,
+	Redacted,
+	Result,
+	Schema,
+	SchemaIssue,
+	Scope,
+	Stream,
+} from "effect"
 import { Sse } from "effect/encoding"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import type {
@@ -11,7 +23,6 @@ import * as Generation from "@better-router/core/Generation"
 import { Request as RequestSchema } from "@better-router/core/GenerationSchema"
 import { Error as ProviderError } from "@better-router/core/Provider"
 import * as Capability from "@better-router/core/Capability"
-import * as RouterPlugin from "@better-router/core/Plugin"
 import { fromNative } from "./GenerationAssembler.js"
 import type { NativeChunk } from "./GenerationAssembler.js"
 
@@ -43,9 +54,39 @@ export interface Service {
 	readonly generate: (request: Request) => Effect.Effect<Process, ProviderError>
 }
 
-export class OpenAIChatCompletions extends Context.Service<OpenAIChatCompletions, Service>()(
-	"BetterRouterOpenAIChatCompletions",
-) {}
+export interface EncodedRequest {
+	readonly url: string
+	readonly method: "POST"
+	readonly headers: Readonly<Record<string, string>>
+	readonly body: Readonly<Record<string, unknown>>
+}
+
+/** Stable endpoint capability; Deployment owns model, credentials, and limits. */
+export const capability: Capability.Capability<
+	"provider.openai.chat-completions",
+	"provider",
+	"generation"
+> = Capability.make({
+	id: "provider.openai.chat-completions",
+	version: 1,
+	kind: "provider",
+	projections: ["generation"],
+	endpoints: [
+		{
+			id: "chat-completions",
+			parameters: [
+				"input",
+				"instructions",
+				"tools",
+				"stream",
+				"temperature",
+				"top_p",
+				"max_output_tokens",
+			],
+			streaming: true,
+		},
+	],
+} as const)
 
 const failure = (
 	kind: ProviderError["kind"],
@@ -60,7 +101,7 @@ const validateConfig = (config: Config): Result.Result<Config, ConfigError> =>
 		? Result.fail(ConfigError.make({ message: "url must use HTTP(S)" }))
 		: Result.succeed(config)
 
-const statusError = (status: number): ProviderError =>
+export const classifyStatus = (status: number): ProviderError =>
 	Match.value(status).pipe(
 		Match.when(429, () => failure("rate_limited", "OpenAI rate limited the request", true)),
 		Match.whenOr(401, 403, () => failure("unauthorized", "OpenAI authentication failed")),
@@ -73,78 +114,331 @@ const statusError = (status: number): ProviderError =>
 	)
 
 const json = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))
-const valueRecord = Schema.Record(Schema.String, Schema.Unknown)
+const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+const usageSchema = Schema.Struct({
+	prompt_tokens: NonNegativeInt,
+	completion_tokens: NonNegativeInt,
+	total_tokens: NonNegativeInt,
+	prompt_tokens_details: Schema.optional(
+		Schema.NullOr(
+			Schema.Struct({
+				cached_tokens: Schema.optional(NonNegativeInt),
+				audio_tokens: Schema.optional(NonNegativeInt),
+			}),
+		),
+	),
+	completion_tokens_details: Schema.optional(
+		Schema.NullOr(
+			Schema.Struct({
+				reasoning_tokens: Schema.optional(NonNegativeInt),
+				audio_tokens: Schema.optional(NonNegativeInt),
+				accepted_prediction_tokens: Schema.optional(NonNegativeInt),
+				rejected_prediction_tokens: Schema.optional(NonNegativeInt),
+			}),
+		),
+	),
+})
+const toolFunctionSchema = Schema.Struct({
+	name: Schema.optional(Schema.NonEmptyString),
+	arguments: Schema.optional(Schema.String),
+})
+const toolCallSchema = Schema.Struct({
+	index: NonNegativeInt,
+	id: Schema.optional(Schema.NonEmptyString),
+	type: Schema.optional(Schema.Literal("function")),
+	function: toolFunctionSchema,
+})
 const deltaSchema = Schema.Struct({
-	content: Schema.optional(Schema.Union([Schema.String, Schema.Null])),
-	tool_calls: Schema.optional(Schema.Array(valueRecord)),
+	role: Schema.optional(Schema.Literal("assistant")),
+	content: Schema.optional(Schema.NullOr(Schema.String)),
+	tool_calls: Schema.optional(Schema.Array(toolCallSchema)),
+	refusal: Schema.optional(Schema.NullOr(Schema.String)),
+	function_call: Schema.optional(toolFunctionSchema),
 })
 const choiceSchema = Schema.Struct({
+	index: Schema.optional(NonNegativeInt),
 	delta: deltaSchema,
-	finish_reason: Schema.optional(Schema.Union([Schema.String, Schema.Null])),
+	finish_reason: Schema.optional(
+		Schema.NullOr(Schema.Literals(["stop", "length", "tool_calls", "content_filter"])),
+	),
+	logprobs: Schema.optional(Schema.Unknown),
 })
 const chunkSchema = Schema.Struct({
-	id: Schema.String,
-	created: Schema.Number,
-	model: Schema.String,
+	id: Schema.NonEmptyString,
+	created: Schema.Finite,
+	model: Schema.NonEmptyString,
 	choices: Schema.Array(choiceSchema),
-	usage: Schema.optional(valueRecord),
+	usage: Schema.optional(Schema.NullOr(usageSchema)),
 })
 
-const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined)
-
-const toolFields = (value: Readonly<Record<string, unknown>>) => {
-	const fn = value.function
-	const functionValue =
-		typeof fn === "object" && fn !== null
-			? (fn as Readonly<Record<string, unknown>>)
-			: undefined
-	return {
-		id: text(value.id),
-		name: functionValue ? text(functionValue.name) : undefined,
-		arguments: functionValue ? text(functionValue.arguments) : undefined,
-	}
+type WireChunk = typeof chunkSchema.Type
+type ToolCall = typeof toolCallSchema.Type
+type Identity = Readonly<Pick<WireChunk, "id" | "created" | "model">>
+type ToolState = {
+	readonly indices: HashMap.HashMap<number, string>
+	readonly names: HashMap.HashMap<string, string>
 }
-
 type ParserState = {
-	readonly started: boolean
-	readonly id: string
-	readonly tools: readonly string[]
+	readonly identity: Option.Option<Identity>
+	readonly tools: ToolState
 	readonly usage: GenerationResponse["usage"]
-	readonly finish: FinishReason | undefined
+	readonly finish: Option.Option<FinishReason>
+	readonly postFinishUsage: boolean
 	readonly done: boolean
 }
+type ToolTransition = readonly [ToolState, readonly NativeChunk[]]
+type Transition = readonly [ParserState, readonly NativeChunk[]]
 
-const finishReason = (reason: string): FinishReason =>
-	reason === "length" || reason === "content_filter"
-		? reason === "length"
-			? "length"
-			: "content_filter"
-		: reason === "tool_calls"
-			? "tool_calls"
-			: "stop"
+const protocolFailure = (
+	path: readonly PropertyKey[],
+	message: string,
+	kind: ProviderError["kind"] = "unknown",
+): ProviderError =>
+	failure(
+		kind,
+		message,
+		false,
+		new Schema.SchemaError(
+			new SchemaIssue.Pointer(path, new SchemaIssue.InvalidValue({ message })),
+		),
+	)
 
-const usage = (
-	value: Readonly<Record<string, unknown>> | undefined,
-): GenerationResponse["usage"] => {
-	const input = typeof value?.prompt_tokens === "number" ? value.prompt_tokens : 0
-	const output = typeof value?.completion_tokens === "number" ? value.completion_tokens : 0
-	return value
-		? {
-				input_tokens: input,
-				output_tokens: output,
-				total_tokens:
-					typeof value.total_tokens === "number" ? value.total_tokens : input + output,
-				input_tokens_details: { cached_tokens: 0 },
-				output_tokens_details: { reasoning_tokens: 0 },
-			}
-		: null
-}
+const toolTransition = (
+	state: ToolState,
+	call: ToolCall,
+	position: number,
+): Result.Result<ToolTransition, ProviderError> =>
+	Result.gen(function* () {
+		const path = ["choices", 0, "delta", "tool_calls", position] as const
+		const mappedId = HashMap.get(state.indices, call.index)
+		if (Option.isSome(mappedId) && call.id !== undefined && mappedId.value !== call.id)
+			return yield* Result.fail(
+				protocolFailure([...path, "id"], "Chat tool index changed its call id"),
+			)
+		const id = yield* Result.fromOption(
+			Option.orElse(Option.fromUndefinedOr(call.id), () => mappedId),
+			() => protocolFailure([...path, "id"], "Chat tool start requires a call id"),
+		)
+		const knownName = HashMap.get(state.names, id)
+		if (Option.isNone(mappedId) && Option.isSome(knownName))
+			return yield* Result.fail(
+				protocolFailure([...path, "index"], "Chat tool call id changed its index"),
+			)
+		const name = yield* Result.fromOption(
+			Option.orElse(Option.fromUndefinedOr(call.function.name), () => knownName),
+			() =>
+				protocolFailure(
+					[...path, "function", "name"],
+					"Chat tool start requires a function name",
+				),
+		)
+		if (Option.isSome(knownName) && knownName.value !== name)
+			return yield* Result.fail(
+				protocolFailure([...path, "function", "name"], "Chat tool function name changed"),
+			)
+		const start: readonly NativeChunk[] = Option.isSome(knownName)
+			? []
+			: [{ type: "tool_start", id, name }]
+		const delta: readonly NativeChunk[] = Option.match(
+			Option.fromUndefinedOr(call.function.arguments),
+			{
+				onNone: () => [],
+				onSome: (value) => [{ type: "tool_delta", id, value }],
+			},
+		)
+		return [
+			{
+				indices: HashMap.set(state.indices, call.index, id),
+				names: HashMap.set(state.names, id, name),
+			},
+			[...start, ...delta],
+		] as const
+	})
+
+const usage = (value: typeof usageSchema.Type): GenerationResponse["usage"] => ({
+	input_tokens: value.prompt_tokens,
+	output_tokens: value.completion_tokens,
+	total_tokens: value.total_tokens,
+	input_tokens_details: { cached_tokens: value.prompt_tokens_details?.cached_tokens ?? 0 },
+	output_tokens_details: {
+		reasoning_tokens: value.completion_tokens_details?.reasoning_tokens ?? 0,
+	},
+})
+
+const chunkTransition = (
+	state: ParserState,
+	chunk: WireChunk,
+): Result.Result<Transition, ProviderError> =>
+	Result.gen(function* () {
+		if (Option.isSome(state.identity)) {
+			const identity = state.identity.value
+			const changed = Option.fromUndefinedOr(
+				(["id", "created", "model"] as const).find((key) => identity[key] !== chunk[key]),
+			)
+			if (Option.isSome(changed))
+				return yield* Result.fail(
+					protocolFailure(
+						[changed.value],
+						"Chat response identity changed during the stream",
+					),
+				)
+		}
+		if (chunk.choices.length > 1)
+			return yield* Result.fail(
+				protocolFailure(
+					["choices"],
+					"Chat Completions streaming does not support multiple choices",
+					"unsupported",
+				),
+			)
+		const choice = Option.fromUndefinedOr(chunk.choices[0])
+		if (Option.isNone(choice)) {
+			if (Option.isNone(state.finish))
+				return yield* Result.fail(
+					protocolFailure(
+						["choices"],
+						"Chat emitted a usage-only chunk before finishing",
+					),
+				)
+			if (state.postFinishUsage)
+				return yield* Result.fail(
+					protocolFailure(["usage"], "Chat emitted duplicate usage after finishing"),
+				)
+			const finalUsage = yield* Result.fromOption(Option.fromNullishOr(chunk.usage), () =>
+				protocolFailure(["usage"], "Chat usage-only chunk must carry usage"),
+			)
+			return [{ ...state, usage: usage(finalUsage), postFinishUsage: true }, []] as const
+		}
+		if (Option.isSome(state.finish))
+			return yield* Result.fail(
+				protocolFailure(["choices"], "Chat emitted output after the finish reason"),
+			)
+		const value = choice.value
+		if (value.index !== undefined && value.index !== 0)
+			return yield* Result.fail(
+				protocolFailure(
+					["choices", 0, "index"],
+					"Chat Completions streaming requires choice index zero",
+					"unsupported",
+				),
+			)
+		if (value.delta.refusal !== undefined && value.delta.refusal !== null)
+			return yield* Result.fail(
+				protocolFailure(
+					["choices", 0, "delta", "refusal"],
+					"Chat Completions refusal deltas are not portable",
+					"unsupported",
+				),
+			)
+		if (value.delta.function_call !== undefined)
+			return yield* Result.fail(
+				protocolFailure(
+					["choices", 0, "delta", "function_call"],
+					"Chat Completions legacy function call deltas are not portable",
+					"unsupported",
+				),
+			)
+		if (value.logprobs !== undefined && value.logprobs !== null)
+			return yield* Result.fail(
+				protocolFailure(
+					["choices", 0, "logprobs"],
+					"Chat Completions log probability deltas are not portable",
+					"unsupported",
+				),
+			)
+		const identity = Option.getOrElse(state.identity, () => ({
+			id: chunk.id,
+			created: chunk.created,
+			model: chunk.model,
+		}))
+		const initial: readonly NativeChunk[] = Option.isSome(state.identity)
+			? []
+			: [
+					{
+						type: "start",
+						id: identity.id,
+						createdAt: identity.created,
+						model: identity.model,
+					},
+				]
+		const text: readonly NativeChunk[] = Option.match(
+			Option.fromNullishOr(value.delta.content),
+			{
+				onNone: () => [],
+				onSome: (content) => [{ type: "text", value: content }],
+			},
+		)
+		const [tools, toolOutput] = yield* (value.delta.tool_calls ?? []).reduce<
+			Result.Result<ToolTransition, ProviderError>
+		>(
+			(previous, call, index) =>
+				Result.gen(function* () {
+					const [current, output] = yield* previous
+					const [next, events] = yield* toolTransition(current, call, index)
+					return [next, [...output, ...events]] as const
+				}),
+			Result.succeed([state.tools, []] as const),
+		)
+		return [
+			{
+				...state,
+				identity: Option.some(identity),
+				tools,
+				usage: Option.match(Option.fromNullishOr(chunk.usage), {
+					onNone: () => state.usage,
+					onSome: usage,
+				}),
+				finish: Option.fromNullishOr(value.finish_reason),
+			},
+			[...initial, ...text, ...toolOutput],
+		] as const
+	})
+
+const terminalTransition = (state: ParserState): Result.Result<Transition, ProviderError> =>
+	Option.match(state.finish, {
+		onNone: () =>
+			Result.fail(
+				protocolFailure(
+					["choices", 0, "finish_reason"],
+					"Chat stream ended without a finish reason",
+				),
+			),
+		onSome: (reason) =>
+			Result.succeed([
+				{ ...state, done: true },
+				[
+					{
+						type: "finish" as const,
+						reason,
+						...(state.usage === null ? {} : { usage: state.usage }),
+					},
+				],
+			] as const),
+	})
+
+/** Decode provider bytes strictly, including an explicit final decoder flush. */
+const decodeUtf8 = (bytes: Stream.Stream<Uint8Array, unknown>): Stream.Stream<string, unknown> =>
+	Stream.concat(
+		Stream.map(bytes, (chunk) => ({ type: "chunk" as const, chunk })),
+		Stream.succeed({ type: "end" as const }),
+	).pipe(
+		Stream.mapAccumEffect(
+			() => new TextDecoder("utf-8", { fatal: true }),
+			(decoder, entry) =>
+				Effect.try({
+					try: () =>
+						entry.type === "chunk"
+							? ([decoder, [decoder.decode(entry.chunk, { stream: true })]] as const)
+							: ([decoder, [decoder.decode()]] as const),
+					catch: (cause) => cause,
+				}),
+		),
+	)
 
 const nativeEvents = (
 	bytes: Stream.Stream<Uint8Array, unknown>,
 ): Stream.Stream<NativeChunk, ProviderError> => {
-	const frames = bytes.pipe(
-		Stream.decodeText(),
+	const frames = decodeUtf8(bytes).pipe(
 		Stream.pipeThroughChannel(Sse.decode({ maxEventSize: 1024 * 1024 })),
 	)
 	return Stream.concat(
@@ -153,147 +447,55 @@ const nativeEvents = (
 	).pipe(
 		Stream.mapAccumEffect(
 			(): ParserState => ({
-				started: false,
-				id: "",
-				tools: [],
+				identity: Option.none(),
+				tools: { indices: HashMap.empty(), names: HashMap.empty() },
 				usage: null,
-				finish: undefined,
+				finish: Option.none(),
+				postFinishUsage: false,
 				done: false,
 			}),
-			(
-				state,
-				entry,
-			): Effect.Effect<readonly [ParserState, readonly NativeChunk[]], ProviderError> =>
+			(state, entry): Effect.Effect<Transition, ProviderError> =>
 				entry.type === "end"
 					? state.done
-						? Effect.succeed([state, [] as readonly NativeChunk[]] as const)
-						: state.finish
-							? Effect.succeed([
-									state,
-									[
-										{
-											type: "finish" as const,
-											reason: state.finish,
-											...(state.usage === null ? {} : { usage: state.usage }),
-										},
-									],
-								] as const)
-							: Effect.fail(
-									failure("unknown", "Chat stream ended without a finish reason"),
-								)
-					: entry.frame.data === "[DONE]"
-						? state.finish
-							? Effect.succeed([
-									{ ...state, done: true },
-									[
-										{
-											type: "finish" as const,
-											reason: state.finish,
-											...(state.usage === null ? {} : { usage: state.usage }),
-										},
-									],
-								] as const)
-							: Effect.fail(
-									failure("unknown", "Chat stream ended without a finish reason"),
-								)
-						: Effect.gen(function* () {
-								const value = yield* json(entry.frame.data).pipe(
-									Effect.mapError((cause) =>
-										failure(
-											"unknown",
-											"Invalid Chat Completions SSE JSON",
-											false,
-											cause,
+						? Effect.succeed([state, []] as const)
+						: Effect.fromResult(terminalTransition(state))
+					: state.done
+						? Effect.fail(protocolFailure([], "Chat emitted data after [DONE]"))
+						: entry.frame.data === "[DONE]"
+							? Effect.fromResult(terminalTransition(state))
+							: Effect.gen(function* () {
+									const value = yield* json(entry.frame.data).pipe(
+										Effect.mapError((cause) =>
+											failure(
+												"unknown",
+												"Invalid Chat Completions SSE JSON",
+												false,
+												cause,
+											),
 										),
-									),
-								)
-								const chunk = yield* Schema.decodeUnknownEffect(chunkSchema)(
-									value,
-								).pipe(
-									Effect.mapError((cause) =>
-										failure(
-											"unknown",
-											"Invalid Chat Completions chunk",
-											false,
-											cause,
+									)
+									const chunk = yield* Schema.decodeUnknownEffect(chunkSchema)(
+										value,
+									).pipe(
+										Effect.mapError((cause) =>
+											failure(
+												"unknown",
+												"Invalid Chat Completions chunk",
+												false,
+												cause,
+											),
 										),
-									),
-								)
-								const choice = chunk.choices[0]
-								const initial = state.started
-									? []
-									: ([
-											{
-												type: "start" as const,
-												id: chunk.id,
-												createdAt: chunk.created,
-												model: chunk.model,
-											},
-										] satisfies readonly NativeChunk[])
-								const content = choice?.delta.content
-								const textChunk =
-									typeof content === "string"
-										? [{ type: "text" as const, value: content }]
-										: []
-								const calls = choice?.delta.tool_calls ?? []
-								const toolResult = calls.reduce<
-									readonly [readonly string[], readonly NativeChunk[]]
-								>(
-									(result, call) => {
-										const [known, output] = result
-										const fields = toolFields(call)
-										const id = fields.id ?? `tool-${known.length}`
-										const started = known.includes(id)
-										const next = started
-											? []
-											: [
-													{
-														type: "tool_start" as const,
-														id,
-														name: fields.name ?? "function",
-													},
-												]
-										const delta = fields.arguments
-											? [
-													{
-														type: "tool_delta" as const,
-														id,
-														value: fields.arguments,
-													},
-												]
-											: []
-										return [
-											started ? known : [...known, id],
-											[...output, ...next, ...delta],
-										]
-									},
-									[state.tools, []],
-								)
-								const finish = choice?.finish_reason
-									? finishReason(choice.finish_reason)
-									: state.finish
-								const currentUsage = chunk.usage ? usage(chunk.usage) : state.usage
-								return [
-									{
-										started: true,
-										id: chunk.id,
-										tools: toolResult[0],
-										usage: currentUsage,
-										finish,
-										done: false,
-									},
-									[...initial, ...textChunk, ...toolResult[1]],
-								]
-							}),
+									)
+									return yield* Effect.fromResult(chunkTransition(state, chunk))
+								}),
 		),
 		Stream.mapError((cause) =>
 			Schema.is(ProviderError)(cause)
 				? cause
 				: failure("unknown", "Chat Completions stream failed", false, cause),
 		),
-	) as unknown as Stream.Stream<NativeChunk, ProviderError>
+	)
 }
-
 type WireMessage = Readonly<Record<string, unknown>>
 
 const messageContent = (
@@ -427,14 +629,10 @@ const requestBody = (request: Request): Readonly<Record<string, unknown>> => {
 	}
 }
 
-const generate = (
-	client: HttpClient.HttpClient,
-	config: Config,
-	request: Request,
-): Effect.Effect<Process, ProviderError> =>
-	Effect.gen(function* () {
-		const parsed = yield* Schema.decodeUnknownEffect(RequestSchema)(request).pipe(
-			Effect.mapError((cause) =>
+const portableRequest = (request: Request): Result.Result<Request, ProviderError> =>
+	Result.gen(function* () {
+		const parsed = yield* Schema.decodeUnknownResult(RequestSchema)(request).pipe(
+			Result.mapError((cause) =>
 				failure("invalid_request", "Invalid generation request", false, cause),
 			),
 		)
@@ -447,11 +645,11 @@ const generate = (
 					item.type !== "function_call_output",
 			)
 		)
-			return yield* Effect.fail(
+			return yield* Result.fail(
 				failure("unsupported", "Chat Completions cannot represent this input item"),
 			)
 		if ((parsed.tools ?? []).some((tool) => tool.type !== "function"))
-			return yield* Effect.fail(
+			return yield* Result.fail(
 				failure("unsupported", "Chat Completions cannot represent this tool"),
 			)
 		if (
@@ -459,11 +657,11 @@ const generate = (
 			typeof parsed.tool_choice !== "string" &&
 			(parsed.tool_choice.type !== "function" || !parsed.tool_choice.name)
 		)
-			return yield* Effect.fail(
+			return yield* Result.fail(
 				failure("unsupported", "Chat Completions cannot represent this tool choice"),
 			)
 		if (parsed.text?.verbosity)
-			return yield* Effect.fail(
+			return yield* Result.fail(
 				failure("unsupported", "Chat Completions cannot represent text verbosity"),
 			)
 		if (
@@ -479,7 +677,7 @@ const generate = (
 					),
 			)
 		)
-			return yield* Effect.fail(
+			return yield* Result.fail(
 				failure("unsupported", "Chat Completions cannot represent this message content"),
 			)
 		if (
@@ -495,78 +693,106 @@ const generate = (
 			parsed.top_logprobs != null ||
 			parsed.metadata
 		)
-			return yield* Effect.fail(
+			return yield* Result.fail(
 				failure("unsupported", "Chat Completions cannot represent one or more options"),
 			)
-		const organization = config.organization
-			? HttpClientRequest.setHeader("openai-organization", config.organization)
-			: (value: HttpClientRequest.HttpClientRequest) => value
-		const outgoing = HttpClientRequest.post(
-			(config.url ?? new URL("https://api.openai.com/v1/chat/completions")).toString(),
-		).pipe(
-			HttpClientRequest.bearerToken(config.apiKey),
-			HttpClientRequest.setHeader("content-type", "application/json"),
-			HttpClientRequest.bodyJsonUnsafe(requestBody({ ...parsed, model: config.model })),
-			organization,
-		)
-		const response = yield* client
-			.execute(outgoing)
-			.pipe(
-				Effect.mapError((cause) =>
-					failure("unavailable", "OpenAI connection failed", true, cause),
-				),
-			)
-		if (response.status < 200 || response.status >= 300)
-			return yield* Effect.fail(statusError(response.status))
-		const contentType = response.headers["content-type"]?.toLowerCase() ?? ""
-		const source = contentType.startsWith("text/event-stream")
-			? nativeEvents(response.stream)
-			: Stream.fail(
-					failure("unsupported", "Chat Completions provider requires an event stream"),
-				)
-		return yield* Generation.Process.make(fromNative(parsed, source))
+		return parsed
 	})
 
-export const layer = (
-	config: unknown,
-): Layer.Layer<OpenAIChatCompletions, ConfigError, HttpClient.HttpClient> =>
-	Layer.effect(
-		OpenAIChatCompletions,
+const generate = (
+	client: HttpClient.HttpClient,
+	config: Config,
+	request: Request,
+): Effect.Effect<Process, ProviderError> =>
+	Effect.uninterruptibleMask((restore) =>
 		Effect.gen(function* () {
-			const parsed = yield* Schema.decodeUnknownEffect(ConfigSchema)(config).pipe(
-				Effect.mapError((cause) => ConfigError.make({ message: cause.message })),
-				Effect.flatMap((value) => Effect.fromResult(validateConfig(value))),
+			const requestScope = yield* Scope.make()
+			return yield* restore(
+				Effect.gen(function* () {
+					const parsed = yield* Effect.fromResult(portableRequest(request))
+					const organization = config.organization
+						? HttpClientRequest.setHeader("openai-organization", config.organization)
+						: (value: HttpClientRequest.HttpClientRequest) => value
+					const outgoing = HttpClientRequest.post(
+						(
+							config.url ?? new URL("https://api.openai.com/v1/chat/completions")
+						).toString(),
+					).pipe(
+						HttpClientRequest.bearerToken(config.apiKey),
+						HttpClientRequest.setHeader("content-type", "application/json"),
+						HttpClientRequest.bodyJsonUnsafe(
+							requestBody({ ...parsed, model: config.model }),
+						),
+						organization,
+					)
+					const response = yield* HttpClient.withScope(client)
+						.execute(outgoing)
+						.pipe(
+							Scope.provide(requestScope),
+							Effect.mapError((cause) =>
+								failure("unavailable", "OpenAI connection failed", true, cause),
+							),
+						)
+					if (response.status < 200 || response.status >= 300)
+						return yield* Effect.fail(classifyStatus(response.status))
+					const contentType = response.headers["content-type"]?.toLowerCase() ?? ""
+					if (!contentType.startsWith("text/event-stream"))
+						return yield* Effect.fail(
+							failure(
+								"unsupported",
+								"Chat Completions provider requires an event stream",
+							),
+						)
+					const source = nativeEvents(response.stream)
+					const process = yield* Generation.Process.make(
+						fromNative(parsed, source).pipe(
+							Stream.onExit((exit) => Scope.close(requestScope, exit)),
+						),
+					)
+					return {
+						...process,
+						cancel: process.cancel.pipe(
+							Effect.andThen(Scope.close(requestScope, Exit.void)),
+						),
+					}
+				}),
+			).pipe(
+				Effect.onExit((exit) =>
+					Exit.isFailure(exit) ? Scope.close(requestScope, exit) : Effect.void,
+				),
 			)
-			const client = yield* HttpClient.HttpClient
-			return { generate: (request: Request) => generate(client, parsed, request) }
 		}),
 	)
 
-/** Stable provider capability; credentials and model selection belong to state. */
-export const capability = Capability.make({
-	id: "provider.openai.chat-completions",
-	version: 1,
-	kind: "provider",
-	projections: ["generation"],
-} as const)
+/** Build an executor scoped to one deployment, without a singleton Context service. */
+export const makeService = (config: Config, client: HttpClient.HttpClient): Service => ({
+	generate: (request) => generate(client, config, request),
+})
 
-type PluginState = { readonly providers: readonly [ReturnType<typeof layer>] }
-
-export type Plugin = RouterPlugin.RouterPlugin<
-	"openai-chat-completions-provider",
-	readonly [typeof capability],
-	PluginState
->
-
-/** Better Auth-style provider plugin. */
-export const plugin = (config: unknown): Plugin =>
-	RouterPlugin.make({
-		id: "openai-chat-completions-provider",
-		capabilities: [capability] as const,
-		state: { providers: [layer(config)] as const },
-	})
-
-export const makePlugin = plugin
+/** Pure request encoding used by transports and contract inspection tools. */
+export const encodeRequest = (
+	config: Config,
+	request: Request,
+): Result.Result<EncodedRequest, ProviderError> =>
+	portableRequest(request).pipe(
+		Result.map((parsed) => {
+			const url = (
+				config.url ?? new URL("https://api.openai.com/v1/chat/completions")
+			).toString()
+			return {
+				url,
+				method: "POST",
+				headers: {
+					authorization: `Bearer ${Redacted.value(config.apiKey)}`,
+					"content-type": "application/json",
+					...(config.organization === undefined
+						? {}
+						: { "openai-organization": config.organization }),
+				},
+				body: requestBody({ ...parsed, model: config.model }),
+			} satisfies EncodedRequest
+		}),
+	)
 
 export const make = (config: unknown): Result.Result<Config, ConfigError> =>
 	Schema.decodeUnknownResult(ConfigSchema)(config).pipe(

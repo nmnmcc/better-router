@@ -1,11 +1,14 @@
 import type { Layer } from "effect"
 import type { HttpApi } from "effect/http-api"
 import type { Service as RouteService } from "./Route.js"
+import type { HttpHostServices } from "./HttpApi.js"
 
 /** A protocol owns this contract and its handler layer. Core only composes them. */
 export interface Contract<Api extends HttpApi.Constraint = HttpApi.Constraint, Requirements = any> {
 	readonly api: Api
-	readonly layer: (route: RouteService) => Layer.Layer<never, any, Requirements>
+	readonly layer: (
+		route: RouteService,
+	) => Layer.Layer<never, any, Requirements | HttpHostServices>
 }
 
 export type Definition<

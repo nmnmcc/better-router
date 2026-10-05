@@ -53,7 +53,11 @@ const OutputConfig = Schema.StructWithRest(
 
 export const Error = Schema.Struct({
 	type: Schema.Literal("error"),
-	error: Schema.Struct({ type: Schema.String, message: Schema.String }),
+	error: Schema.Struct({
+		type: Schema.String,
+		message: Schema.String,
+		param: Schema.optional(Schema.String),
+	}),
 })
 
 export const Request = Schema.StructWithRest(
@@ -80,7 +84,7 @@ export const api = HttpApi.make("anthropic-messages").add(
 				Schema.Unknown,
 				HttpApiSchema.StreamUint8Array({ contentType: "text/event-stream; charset=utf-8" }),
 			],
-			error: [400, 401, 404, 422, 429, 500, 502, 503, 504].map((status) =>
+			error: [400, 401, 403, 404, 413, 422, 429, 500, 502, 503, 504].map((status) =>
 				Error.pipe(HttpApiSchema.status(status)),
 			),
 		}),

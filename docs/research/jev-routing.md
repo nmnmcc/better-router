@@ -2,18 +2,20 @@
 
 调研日期：2026-09-30
 
+Router 契约更新日期：2026-10-05。下文的 TypeSafe API、模型和限额仍是调研日期的来源快照；本次更新只对齐仓库的插件与路由契约，没有调用 Jev 服务，也没有重新验证其最新发布状态。
+
 ## 结论
 
-**当前可以实现一个基于 Jev 的自动路由策略，但它是“远程语义判定 + 本地确定性排序”的策略插件，不是 Router 已内置的能力。** 现有 `RoutingPolicy.rank` 已经提供了最小的决策插口：接收一个 `GenerationRequest` 和已经筛选过的候选 deployment，返回候选的有序子集。Jev 的 `Choice` 概率分布可以用来排序候选，`Score` 可以用来评估请求难度/风险，`Noul` 可以作为是否升级或是否允许自动路由的门槛。
+当前可以实现一个基于 Jev 的自动路由插件：用远程服务判断语义，再由本地代码确定候选顺序。仓库没有内置 Jev 客户端或策略。`Plugin.config.policies` 中的 `RoutingPolicy.rank` 接收 `GenerationRequest`、已经筛选过的候选 deployment 和策略上下文，返回候选的有序子集；`config.pipelines` 则可以收窄 `RoutingContext.candidateDeployments` 并添加不可变 signals。Jev 的 `Choice` 概率分布可以用来排序候选，`Score` 可以用来评估请求难度/风险，`Noul` 可以作为是否升级或是否允许自动路由的门槛。
 
-不过，当前契约对“策略需要外部服务”表达得不够完整：`RoutingPolicy.rank` 的返回类型没有 `Requirements` 泛型，而 deployment、pipeline、middleware 和 `start` 都可以声明资源需求。因此，生产级 Jev 策略需要在插件外闭包持有一个客户端，或先扩展 core 让 policy 显式声明并获得 `HttpClient`/Jev client service。否则容易把网络 I/O、超时和错误映射藏在未类型化的闭包中。
+策略和 pipeline 的 Effect 已带 `Requirements` 泛型，外部 Jev service 应由插件 `layer` 或宿主 Layer 注入。稳定的路由能力声明放在 `capabilities`，候选目录、policy/pipeline 和阈值放在 `config`；客户端、凭证、超时和观测服务放在运行时环境。`init` 负责 scoped 资源初始化，不能在启动时追加候选或修改静态 Registry。
 
 建议把落地分成两层：
 
 1. **PoC**：固定一组候选，将请求文本和候选描述投影成 Jev `Choice`，调用远程 API，校验返回的候选 ID 和概率，再把 Jev 选中的 deployment 放在 fallback 列表首位。
 2. **生产集成**：增加可注入的 Jev client/service、请求超时和本地 deterministic fallback；记录模型版本、概率、confidence、Jev 延迟、provider 结果和最终路由，使用业务数据做离线评估后再调整问题定义和阈值。
 
-这意味着“能不能实现”的答案是**能**，但当前仓库可以直接承载的是策略逻辑，不能直接声称已经具备 Jev 的 SDK、资源注入、观测和反馈闭环。
+现有插件接口可以承载上述策略和 typed service 注入，但 Jev 请求/响应 Schema、客户端 Layer、专用观测和离线评估仍需实现，不能把通用插件接口视为已经完成 Jev 集成。
 
 ## Jev 是什么
 
@@ -64,7 +66,7 @@ Content-Type: application/json
 
 完整字段和错误由官方 API 文档及 OpenAPI 所有者定义：[`API reference`](https://docs.typesafe.ai/api)、[`OpenAPI 3.1`](https://api.typesafe.ai/openapi.json)。文档列出的错误包括 401、422、429 和 529；429/529 应退避重试。
 
-### SDK 和运行时
+### SDK 和运行时（调研日期快照）
 
 官方 JavaScript SDK 的默认地址是 `https://api.typesafe.ai`，默认模型是 `jev-latest`；`systemOne` 调用固定发送到 `/v1/systemone`。SDK 支持自定义 `baseURL`、每次调用的 timeout、AbortSignal 和 retry policy；文档默认每次尝试 timeout 为 10 秒，默认最多重试 2 次，重试 408、429 和 5xx。参考 [`TypeSafeClientConfig`](https://docs.typesafe.ai/sdk/javascript/api/interfaces/TypeSafeClientConfig)、[`RequestOptions`](https://docs.typesafe.ai/sdk/javascript/api/interfaces/RequestOptions)、官方 SDK 源码 [`client.ts`](https://github.com/typesafe-ai/typesafe-sdk-js/blob/66880ccded6cb642dc1809620c2b108c33730214/src/client.ts) 和 [`retry.ts`](https://github.com/typesafe-ai/typesafe-sdk-js/blob/66880ccded6cb642dc1809620c2b108c33730214/src/retry.ts)。
 
@@ -82,37 +84,46 @@ Jev 1.13 的输入是文本：字符串、JSON object 或 text array；官方模
 
 ## 和当前 Router 契约的对照
 
-当前仓库的最小路由面如下：
+插件的 effectful policy 使用以下决策边界；完整声明以 [`PluginContributions.ts`](../../packages/core/src/PluginContributions.ts) 为准：
 
 ```ts
-interface RoutingPolicy<Id extends string = string> {
-	readonly id: Identifier<Id>
-	readonly rank: (
-		request: GenerationRequest,
-		candidates: readonly DeploymentRef[],
-	) => Effect.Effect<readonly DeploymentRef[], RoutingError>
+type JevRank<Requirements> = (
+	request: GenerationRequest,
+	candidates: readonly DeploymentRef[],
+	context: PolicyContext,
+	routing?: RoutingContext,
+) => Effect.Effect<readonly DeploymentRef[], JevError, Requirements>
+
+type JevPipeline<Requirements> = (
+	context: RoutingContext,
+) => Effect.Effect<RoutingContext, JevError, Requirements>
+
+const config = {
+	policies: [jevPolicy],
+	pipelines: [jevSignals],
+	modelRoutes: [modelRoute],
 }
 ```
 
-见 [`Routing.ts`](../../packages/core/src/Routing.ts#L43-L49)。`Router` 会先按 route 选出配置的 deployment，再按 required upstream transport 过滤，之后调用 policy；返回值只能是 eligible deployment 的无重复有序子集，Router 会拒绝未知或重复 ID。见 [`Router.ts`](../../packages/core/src/Router.ts#L310-L370)。没有 policy 时，route 中的 deployment 顺序就是 fallback 顺序（见 [`Routing.ts`](../../packages/core/src/Routing.ts#L12-L15)）。
+这里的 `JevError` 是集成插件应定义的 Schema 错误，`jevPolicy`、`jevSignals` 和 `modelRoute` 是集成示意，不是仓库已导出的 Jev 对象。只需要选择首选 deployment 时可只贡献 policy；需要把难度、风险或 confidence 传给后续策略时可贡献 pipeline。候选结果必须是本次 eligible 集合的无重复子集，不能用 Jev 返回的字符串创建新 deployment。候选为空和未知/重复 ID 都是 typed routing failure。见 [`Routing.ts`](../../packages/core/src/Routing.ts) 和 [`Policies.ts`](../../packages/core/src/Policies.ts)。配置的 `simple` strategy 保留候选声明顺序；其他内置策略可使用权重、成本或运行时 metrics。
 
 因此，一个 Jev policy 可以实现下面的确定性流程：
 
 ```text
-GenerationRequest + eligible DeploymentRef
+RoutingContext + eligible DeploymentRef
   -> 投影成 { request_state, candidates }
   -> Jev Choice/Score/Noul（远程调用）
   -> Schema 解码 + ID/概率/confidence 校验
-  -> 按概率/综合分数排序，保留未选候选作为 fallback
-  -> 返回 DeploymentRef[]
+  -> policy 返回有序子集 / pipeline 返回 candidates 和 signals
+  -> 本地健康、权限、预算与能力检查
   -> Router 执行首选 deployment
 ```
 
-Router 的 provider fallback 仍然由本地执行链控制：只有 `ProviderError.retryable` 且还没有发出第一个 generation event 时才尝试下一个 deployment；Jev 发生在 ranking 阶段，若 policy 直接失败，Router 会返回 `RoutingFailed`，不会自动把 policy 错误当成 provider fallback。见 [`Router.ts`](../../packages/core/src/Router.ts#L340-L410)。策略应自行决定 Jev 超时、429/529、无效响应时是回退到原始 eligible 顺序（fail-open）、拒绝请求（fail-closed）还是走单独的保守 deployment。
+Provider fallback 仍由本地执行链和 route retry policy 控制。只有满足重试条件且还没有发出第一个语义 generation event 时，才能尝试下一 deployment；已经输出事件后不能重放。见 [`Routing.ts`](../../packages/core/src/Routing.ts)、[`RoutingRuntime.ts`](../../packages/core/src/RoutingRuntime.ts) 和 [`Router.ts`](../../packages/core/src/Router.ts)。Jev 失败发生在选路阶段，不能自动解释为一次 provider attempt 失败。策略应明确选择 Jev 超时、429/529、无效响应时是保留原始 eligible 顺序、拒绝请求还是限制到一个保守候选。任何降级仍必须满足原候选的能力、访问权限和预算限制。
 
-当前 `DeploymentRef` 只有 `id`、`provider`、`model`，没有价格、延迟、上下文窗口、实时健康度或能力集合；这些字段不能凭空让 Jev 判断。若路由要使用成本/延迟/健康度，需要由插件配置一个不可变候选目录，或新增 typed service/metadata，并在投影中显式提供给 Jev。当前 `GenerationRequest` 还包含多模态 input、tools、sampling、reasoning 等字段；不应把完整对象未经筛选地序列化给 Jev。见 [`Deployment.ts`](../../packages/core/src/Deployment.ts#L18-L25) 和 [`Generation.ts`](../../packages/core/src/Generation.ts#L337-L365)。
+候选 identity 包含 `id`、`provider` 和 `model`；路由候选还可带权重、tags、价格和 limits。`PolicyContext`/`RoutingContext` 的 metrics 提供 active requests、已观测延迟和成功/失败计数，signals 提供前序 pipeline 的判定结果。静态能力来自 Capability/Provider Contract，健康度和 cooldown 来自运行时服务；Jev 只能使用集成插件明确投影的字段，不能推断缺失的上下文窗口或未观测延迟。见 [`Deployment.ts`](../../packages/core/src/Deployment.ts)、[`Policies.ts`](../../packages/core/src/Policies.ts)、[`RoutingRuntime.ts`](../../packages/core/src/RoutingRuntime.ts) 和 [`ProviderContract.ts`](../../packages/core/src/ProviderContract.ts)。`GenerationRequest` 包含多模态 input、tools、sampling、reasoning 等字段；不应把完整对象未经筛选地序列化给 Jev。见 [`Generation.ts`](../../packages/core/src/Generation.ts)。
 
-另一个集成边界是资源注入。`RouterPlugin` 的 `deployments`、`pipelines`、`middleware` 和 `start` 可以带 `Requirements`，但 `RoutingPolicy.rank` 本身没有对应的环境泛型。见 [`Plugin.ts`](../../packages/core/src/Plugin.ts#L52-L75)。这使“通过 Router 的 `HttpClient` service 调用 Jev”在类型上不如 deployment executor 清晰；更稳妥的 core 方向是为 policy 增加 requirements（或定义一个专用 `RoutingService`），并让 Router 在执行 rank 时提供该环境。未改 core 的 PoC 可以把已经构造好的客户端闭包传给 policy，但应把超时、凭证、重试、Schema 解码和脱敏放在独立边界中。
+资源注入通过 `Plugin.layer` 和 `init` 接入。`Router.make` 先纯构造静态配置，`Router.runtime` 在 Scope 中装配服务并启动插件，`Router.layer` 把 runtime 暴露给宿主；policy/pipeline 的服务需求必须沿类型传到这条装配路径。见 [`Plugin.ts`](../../packages/core/src/Plugin.ts) 和 [`Router.ts`](../../packages/core/src/Router.ts)。Jev client 应作为独立 Effect service 管理 HTTP、凭证、超时、重试、Schema 解码和脱敏，不能把 I/O 或 secret 埋进 Capability。宿主若记录路由反馈，可使用独立 Persistence Layer；持久化候选判定和脱敏结果，不保存 Jev 明文 API key 或完整敏感输入。
 
 ## 可行的 Jev 路由形态
 
@@ -152,7 +163,7 @@ questions:
 
 TypeSafe 发布文章声称 Jev 的端到端响应时间约为 70–500ms，相比其对比的 frontier LLM 约 3–329 秒，在 System One 形状的任务上可快 40–200 倍；官方文档在通用描述中写“多数查询约 100ms”。这些是 TypeSafe 的产品/演示数据，不是 better-router 的 SLA，也不包括本地状态投影、网络往返、SDK 重试和 Router 自身执行时间。来源：[`Introducing System One Models & Jev`](https://typesafe.ai/blog/introducing-system-one-models-and-jev)、[`How to build with System One`](https://docs.typesafe.ai/concepts/how-to-build-with-system-one)。
 
-当前模型页列出 Jev 1.13 的 64k 总 context（state + questions），state 加最长问题有 32k 限制，输入仅文本；公开限额为 250,000 tokens/s 和 1,200 requests/min，且可能动态调整。`jev-latest` 是可移动 alias；如果阈值依赖某个版本，应记录并固定 `jev-1.13.0`，因为 alias 更新可能改变答案。来源：[`Models`](https://docs.typesafe.ai/models)。
+调研日期的模型页列出 Jev 1.13 的 64k 总 context（state + questions），state 加最长问题有 32k 限制，输入仅文本；公开限额为 250,000 tokens/s 和 1,200 requests/min，且可能动态调整。`jev-latest` 是可移动 alias；如果阈值依赖某个版本，应记录并固定 `jev-1.13.0`，因为 alias 更新可能改变答案。来源：[`Models`](https://docs.typesafe.ai/models)。
 
 对 Router 来说，远程 Jev 是每次请求前增加的一次网络判定。建议：
 
@@ -194,12 +205,12 @@ Jev 不提供客户级 fine-tune 或 LoRA；官方模型页说相同权重服务
 
 ## 最终判断
 
-在不改生产代码的前提下，可以把 Jev 当作一个**外部、低延迟、结构化的 ranking oracle**，由一个 `policies` 插件调用并返回现有 Router 能接受的 deployment 顺序。这已经足以验证“按请求语义选择模型”的价值。
+可以把 Jev 当作外部的结构化决策服务，由对象插件通过 `config.policies` 或 `config.pipelines` 贡献路由判定，并用 Layer 注入客户端。这条集成路径足以验证按请求语义选择模型，但仓库没有提供 Jev 实现。
 
 若要把它作为 better-router 的长期能力，至少应补齐：
 
-1. policy 的 typed external requirements（Jev client、HTTP transport、clock/metrics）；
-2. 候选 deployment 的可选静态 capability/cost/latency 元数据和健康状态读取；
+1. Jev client Layer 及其 HTTP transport、clock/metrics 的 typed requirements；
+2. 将现有候选 metadata、runtime metrics 和能力目录投影成 Jev 的最小输入；
 3. Jev 请求/响应 Schema、超时/重试/降级策略和脱敏日志；
 4. route decision 的 confidence/probability/版本观测与离线 replay/eval；
 5. 明确远程 Jev-only 部署边界，不把 OpenAI/Anthropic/Gemini 的 adapter 当成本地 Jev。

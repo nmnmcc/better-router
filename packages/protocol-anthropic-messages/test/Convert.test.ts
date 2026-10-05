@@ -34,3 +34,16 @@ it("keeps conversion issue paths for unsupported system blocks", () => {
 	if (Result.isSuccess(result)) return
 	assert.equal(result.failure.path, "request.system[0]")
 })
+
+it("rejects unknown top-level request parameters with a nested path", () => {
+	const result = decodeRequest({
+		model: "public",
+		messages: [{ role: "user", content: "Hi" }],
+		max_tokens: 128,
+		unsupported_parameter: true,
+	})
+	assert.equal(Result.isFailure(result), true)
+	if (Result.isSuccess(result)) return
+	assert.equal(result.failure.reason, "unsupported")
+	assert.equal(result.failure.path, "request.unsupported_parameter")
+})

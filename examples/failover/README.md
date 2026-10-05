@@ -1,6 +1,9 @@
 # Cross-provider fallback
 
-Expose one Chat Completions endpoint backed by OpenAI Responses first and Anthropic Messages second. Callers use the public `reliable` model alias.
+Expose Chat Completions and Anthropic Messages endpoints backed by an OpenAI
+Responses deployment with an Anthropic Messages fallback. Callers use the public
+`reliable` model alias. The route declares its primary and fallback deployment
+IDs; the host resolves their credential references through one Layer.
 
 ```sh
 devenv shell -- yarn build
@@ -10,7 +13,11 @@ ANTHROPIC_API_KEY=anthropic-provider ANTHROPIC_MODEL=claude-3-5-haiku-latest \
   devenv shell -- yarn workspace @better-router/example-failover start
 ```
 
-The gateway listens on `http://127.0.0.1:8787`. It falls back to Anthropic only when the first provider fails before emitting a model event, so partial output is never replayed.
+The gateway listens on `http://127.0.0.1:8787`. Its retry policy permits two
+attempts and falls back only after a retryable failure before the first semantic
+event. Once output starts, it reports the failure without replaying partial
+output. Set `OPENAI_RESPONSES_URL` or `ANTHROPIC_MESSAGES_URL` for compatible
+endpoints, and `ANTHROPIC_MAX_TOKENS` to override the deployment's default.
 
 ```sh
 curl -N http://127.0.0.1:8787/v1/chat/completions \

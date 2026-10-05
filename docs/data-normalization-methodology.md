@@ -1,46 +1,60 @@
 # Replacing shape-repair helpers with normalized data
 
-This is an implementation method, not an instruction to delete every short function. The source inventory and reproduced stream-ordering limitation are in [the investigation](data-normalization-research.md). Use this document when changing the existing Chat, Anthropic, or Responses adapters. The generation ABI remains the semantic interface of the router; protocol wire shapes are plugin-owned projections, and the proposed operation-local shapes below stay private unless a demonstrated second caller justifies a shared module.
+This is an implementation method, not an instruction to delete every short function. The historical investigation and its synthetic stream-ordering observation are in [the investigation](data-normalization-research.md). This edition follows the plugin architecture introduced on 2026-10-05: core owns the Generation ABI, protocol packages own wire conversion and HTTP, and provider packages own deployment execution.
 
-As of 2026-09-27, the repository has applied the first three safe slices: typed outgoing drafts in Chat and Anthropic, a parse-once Chat ingress result, and a single-facts traversal for Responses input semantics. The stream-identity redesign is intentionally still a separate behavior change.
+Normalization should remove representational branches without losing protocol distinctions. Keep operation-local views private until two real consumers justify a shared module.
 
-## Decision rule
+## Decide what a helper owns
 
-Classify a helper by what would happen if it were removed:
+1. **Shape repair:** Repeated string/array checks, optional-field proofs, and untyped record lookups suggest an imprecise intermediate shape. Replace that shape with an immutable tagged value whose facts come from Schema decoding or pure conversion.
+2. **Semantic rule:** Grouping items, assigning identity, rejecting nonportable features, and classifying errors are protocol decisions. Keep these rules in the owning converter, provider, or assembler.
+3. **Wire encoding:** Native HTTP, JSON, and SSE envelopes belong to their protocol. Similar helper names do not establish a shared wire contract.
+4. **Mechanical wrapping:** Consolidate only if it removes caller knowledge. A wrapper around the same parameters and branches is not a deeper module.
 
-1. **Shape repair:** A caller repeatedly checks whether already-decoded data is a string or array, whether a required field happens to exist, or what type an untyped record contains. Replace the loose intermediate shape with an immutable, discriminated shape that establishes the fact once. The proof must come from a Schema-decoded wire value or from a pure conversion of that value.
-2. **Semantic rule:** A helper decides what a protocol supports, groups items, assigns identities, classifies a failure, or translates distinct native concepts. Keep the rule close to its owning adapter or assembler. Normalization may simplify its inputs but must not hide its decision.
-3. **Wire encoder:** A helper produces protocol-specific HTTP, JSON, or SSE. Keep the native encoder unless several callers actually share the same wire contract. Similar function names do not establish identical behavior.
-4. **Mechanical wrapper:** Consolidate only when doing so removes caller knowledge and does not introduce a second layer that simply forwards the same parameters. A small pure helper can be valuable inside a deep module.
+If deleting a helper makes its branches reappear in callers, the helper owns useful behavior. If callers consume a proven shape and those branches disappear, deletion improves locality. Function count and line count are not success criteria.
 
-The deletion test is the final check: if removing the helper makes the same branches reappear in several callers, it owns useful behavior. If the branches disappear because callers now consume a proven shape, deleting it improves locality. Function count and line count are not independent success metrics.
-
-## Place each shape at the right seam
+## Place each shape at the right boundary
 
 ```text
 untrusted native JSON/SSE
-  -> native Schema decode (structural failure with original field path)
-  -> explicit supported-native variant (unsupported semantics stay visible)
-  -> full OpenResponses request or identity-bearing native operations
-  -> operation-local, source-aware view where multiple representations coexist
-  -> target-specific typed draft
-  -> target wire Schema/encoder, HTTP response, or canonical event stream
+  -> protocol or provider wire Schema
+  -> explicit supported-native variant
+  -> full Generation request or provider-native operations
+  -> source-aware operation-local view
+  -> target-specific draft
+  -> native encoder or canonical event stream
 ```
 
-Each arrow has a different job. A Schema proves structural facts; a capability projection decides whether a valid native field is portable; a view removes representational alternatives for computation; an adapter decides the target's native semantics. Do not make a single universal normalization pass that silently drops fields to satisfy all targets. [GenerationRequest](../packages/core/src/Generation.ts#L38) intentionally includes a string or item-array `input`, nullable and absent settings, and full item variants; [GenerationSchema](../packages/core/src/GenerationSchema.ts#L35) follows the pinned schema. Neither is replaced by a text-only message model.
+A Schema establishes structural facts and original issue paths. A capability projection decides whether valid semantics are portable. A local view simplifies computation. A provider encoder decides native grouping, images, arguments, and required defaults. Do not collapse these into a universal pass that silently drops fields.
 
-The proposed deep module interface is the existing conversion or execution operation: for example, `toResponseRequest`, `toChatRequest`, `toMessagesRequest`, or `fromNative`. Keep intermediate views and draft types private to their owning module initially. Extract a flat PascalCase module only after two real consumers benefit, without introducing an `internal/` directory or a new router capability. Pure conversion uses `Result`, expected internal absence uses `Option`, and streaming/I/O uses `Stream` and `Effect`. A wire decoder does not run I/O or inspect deployment policy.
+Core [GenerationRequest](../packages/core/src/Generation.ts) and [GenerationSchema](../packages/core/src/GenerationSchema.ts) are protocol-neutral. The dated OpenResponses wire Schema lives in [protocol-openai-responses](../packages/protocol-openai-responses/src/OpenAIResponsesSchema.ts); it is one external projection, not the core implementation dependency. Neither contract should be replaced by a text-only message model.
 
-### Normalized-shape template
+The conversion boundary is a protocol `Convert.decodeRequest`, `encodeResponse`, or `encodeEvent`, or a provider request/event conversion. Keep intermediate drafts inside that owning PascalCase module first. Pure conversion uses `Result`; internal absence uses `Option`; streaming and resource acquisition use `Stream` and `Effect`.
 
-A useful private shape makes the invariant visible in its fields. It is not merely an array with a shorter name:
+### Preserve information in the private shape
 
 ```ts
-type NormalizedEntry = {
-	readonly kind: "message" | "function_call" | "function_result"
-	readonly payload: MessagePayload | FunctionCallPayload | FunctionResultPayload
-	readonly origin: { readonly path: string; readonly form: "string" | "parts" | "native" }
+type Source = {
+	readonly path: string
+	readonly form: "string" | "parts" | "native"
 }
+
+type NormalizedEntry =
+	| {
+			readonly kind: "message"
+			readonly payload: MessagePayload
+			readonly source: Source
+	  }
+	| {
+			readonly kind: "function_call"
+			readonly payload: FunctionCallPayload
+			readonly source: Source
+	  }
+	| {
+			readonly kind: "function_result"
+			readonly payload: FunctionResultPayload
+			readonly source: Source
+	  }
 
 type Presence<A> =
 	| { readonly kind: "absent" }
@@ -48,66 +62,38 @@ type Presence<A> =
 	| { readonly kind: "value"; readonly value: A }
 ```
 
-In real code, use a discriminated union so `payload` is narrowed together with `kind`; the sketch keeps that relationship compact. Add `Presence` only for fields whose omission, nullability, or empty value changes output or capability checks. A normalized entry should be constructible only after Schema decoding and semantic projection have proved its required fields. The final encoder is the only place that turns this shape back into provider-specific strings, arrays, records, or envelopes.
+The payload types above are operation-local placeholders, not proposed core exports. Add `Presence` only when omission, nullability, or an empty value changes a support decision or output. Otherwise use `Option` or keep the decoded source field.
 
-### Information that may not be erased
+- **Source paths and forms:** Shorthand `input` errors must remain at `input`, not at a synthetic array path. Preserve string versus parts when the target makes a form-specific decision.
+- **Presence:** Preserve absent, `null`, `[]`, `false`, and `0` where they differ observably. Do not use truthiness to decide whether a setting exists.
+- **Order and identity:** Retain item/content order, tool call IDs, native block indices, and item lifetimes. Anonymous text cannot represent every native stream.
+- **Unsupported semantics:** Preserve or explicitly reject extensions, phase, annotations, reasoning, strict tools, continuation, and provider fields. Keep [ConversionError](../packages/core/src/Convert.ts) reason and source path.
+- **Provider facts:** Maximum-token defaults, image restrictions, JSON argument decoding, unavailable usage, finish reasons, retryability, and native terminators remain provider-owned.
 
-- **Source path and form:** A shorthand string `input` must still report errors at `input`, not a manufactured `input[0].content[0]`. Preserve whether content was a string or parts when a target's support check depends on that form; Anthropic currently accepts system content only as a string ([source](../packages/plugin-anthropic-messages/src/AnthropicMessages.ts#L81)).
-- **Presence:** Where observably relevant, distinguish absent, explicit `null`, explicit `[]`, `false`, and `0`. Use `Option` only when the distinction is genuinely irrelevant; otherwise use a private tagged presence value or retain the decoded source field. Both adapters use original `tools` presence to decide whether to emit native `tools` ([Chat](../packages/plugin-openai-chat-completions/src/OpenAIChatCompletionsUpstream.ts#L185), [Anthropic](../packages/plugin-anthropic-messages/src/AnthropicMessages.ts#L166)).
-- **Order and identity:** Retain ordered input items, output items, content parts, tool call IDs, native block IDs/indices, and item lifetimes. Never normalize a stream to anonymous text if later output needs to distinguish blocks.
-- **Unsupported semantics:** Preserve or explicitly reject extensions, phase, annotations, reasoning, strict tools, continuation, and provider-specific fields. An unknown-but-valid feature is not necessarily a malformed request. Keep `ConversionError.reason`, nested paths, and typed provider errors ([Conversion](../packages/core/src/Conversion.ts#L4)).
-- **Provider decisions:** Deployment-specific defaults, required output limits, accepted image details, JSON argument decoding, usage availability, finish reasons, retryability, and SSE terminators remain target-specific ([Chat](../packages/plugin-openai-chat-completions/src/OpenAIChatCompletionsUpstream.ts#L92), [Anthropic](../packages/plugin-anthropic-messages/src/AnthropicMessages.ts#L63), [Responses](../packages/plugin-openai-responses/src/OpenAIResponses.ts#L57)).
+## Keep configuration normalization separate from runtime state
 
-## Disposition of the current helper clusters
+Plugins declare capability metadata and `config` contributions before acquisition. `Router.make` returns a pure `Result<Router.Router<Plugins>, SetupError>` and creates the immutable Registry. `Router.runtime` or `Router.layer` then resolves external services, migrations, deployment factories, and plugin `init` inside a Scope. This is a different normalization boundary from native request conversion; see [Plugin](../packages/core/src/Plugin.ts), [Registry](../packages/core/src/Registry.ts), and [Router](../packages/core/src/Router.ts).
 
-| Cluster                                                                                   | Replacement or retention rule                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Observable proof before deletion                                                                                                                                                                                                                                                                                                                                                                              |
-| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Four `only` copies; two `required` copies; core `requireThat`                             | For a supported native variant, use a decoded literal discriminant and the fields required by that variant. Keep an explicit semantic rejection path for unknown fields/variants. Remove a call only after its old malformed-vs-unsupported outcome and field path are preserved. Do not globally change permissive schemas to `onExcessProperty: "error"` and thereby turn semantic 422s into structural 400s.                                                                                                    | Nested bad types, missing conditional fields, extra `cache_control`/delta fields, unsupported variants, and exact path/reason assertions ([Chat](../packages/plugin-openai-chat-completions/src/OpenAIChatCompletions.ts#L125), [Anthropic](../packages/plugin-anthropic-messages/src/AnthropicMessagesHttp.ts#L94), [upstream events](../packages/plugin-anthropic-messages/src/AnthropicMessages.ts#L259)). |
-| `parts`, `textParts`, `flush`, `append`, and wire-shaped `Record<string, unknown>` drafts | Normalize the local accumulator to required typed arrays and tagged roles, then encode the target's original string/array/null wire form once at the end. Keep provider-specific grouping and image/argument conversion.                                                                                                                                                                                                                                                                                           | Output JSON parity for simple strings, arrays, empty and tool-only messages, adjacent calls/results, and unchanged input objects ([Chat draft site](../packages/plugin-openai-chat-completions/src/OpenAIChatCompletionsUpstream.ts#L99), [Anthropic draft site](../packages/plugin-anthropic-messages/src/AnthropicMessages.ts#L53)).                                                                        |
-| Three `fields` wrappers and `rest` declarations                                           | Not a deletion target by itself: permissive wire schemas may be needed to classify unknown semantics accurately. Revisit after supported variants own the checks; retain local schema construction if its removal just repeats `StructWithRest` at many sites.                                                                                                                                                                                                                                                     | Schema decode/encode and unknown-field error category parity ([Chat SSE schema](../packages/plugin-openai-chat-completions/src/OpenAIChatCompletionsUpstream.ts#L211), [Anthropic SSE schema](../packages/plugin-anthropic-messages/src/AnthropicMessages.ts#L182)).                                                                                                                                          |
-| Repeated `fail`/`failure`, `rejected`/`malformed`/`eventError`                            | Keep small constructors while they locate a protocol's error policy. Consolidate an actual shared error classification only if it removes duplicated policy and retains `kind`, `retryable`, safe message, and cause.                                                                                                                                                                                                                                                                                              | Typed failure and retry/fallback behavior before the first event and after a partial event ([Router](../packages/core/src/Router.ts#L215), [provider errors](../packages/core/src/Deployment.ts#L23)).                                                                                                                                                                                                        |
-| Three `statusError` and three `onError`/`errorResponse` clusters                          | HTTP ingress may eventually share classified error _facts_ and still encode distinct native envelopes. Do not unify upstream `statusError` policies: Responses, Chat, and Anthropic currently disagree on retryability and Anthropic handles 529 ([sources](data-normalization-research.md#L98)).                                                                                                                                                                                                                  | Status, native envelope, safe-message and retryability matrices for each protocol.                                                                                                                                                                                                                                                                                                                            |
-| `frame`, `send`, `initial`, `transition`, `snapshot`                                      | Retain unless the owning module's interface is redesigned for a demonstrated reason. These encode native SSE shape, subscription-local state, or terminal resource invariants; deleting them because they are small would move complexity into callers ([stream assembler](../packages/core/src/GenerationEvents.ts#L63), [Chat SSE](../packages/plugin-openai-chat-completions/src/OpenAIChatCompletionsHttp.ts#L124), [Anthropic SSE](../packages/plugin-anthropic-messages/src/AnthropicMessagesHttp.ts#L325)). | Sequence, terminal and cancellation checks at the existing conversion/stream interface.                                                                                                                                                                                                                                                                                                                       |
+`Capability` records stable, credential-free support. `DeploymentConfig` records private model, endpoint, pricing, limits, and credential reference. Shared [CredentialResolver](../packages/core/src/ProviderContract.ts) and deployment factories acquire runtime credentials and clients. Health, concurrent calls, cooldown, and usage belong to runtime services and [Persistence](../packages/core/src/Persistence.ts), not to capabilities or request drafts.
 
-## Migration in independently reviewable slices
+Compile declaration-only IDs and references once during preflight. Run health filtering, asynchronous pipelines, policy ranking, and budget decisions for each invocation. A policy result must remain an ordered subset of the eligible candidates; resolve IDs back to canonical deployments rather than trusting replacement runtime objects. Dynamic npm/config plugin loading and runtime declaration insertion are outside this architecture.
 
-**0. Characterize behavior before restructuring.** Record representative accepted and rejected wire inputs, exact JSON/SSE output, paths and error reasons, and input immutability. Cover short string, parts array, empty content, tool-only assistant message, duplicate/unknown fields, explicitly absent/null/empty settings, and unsupported extensions. Existing [conversion tests](../packages/plugin-openai-chat-completions/test/OpenAIChatCompletions.test.ts#L30), [Anthropic tests](../packages/plugin-anthropic-messages/test/AnthropicMessages.test.ts#L23), and [Schema paths](../packages/core/test/GenerationSchema.test.ts#L56) are the starting points. A known wrong output is a separate regression case with the desired result, not a snapshot to preserve.
+## Change one observable boundary at a time
 
-**1. [Implemented] Fix one outgoing adapter's construction shape.** Inside `toChatRequest`, accumulate typed target drafts instead of native `Record<string, unknown>[]`: assistant content and function calls have required readonly arrays, and a tool result has a known call ID. Anthropic now uses a tagged string-or-block content draft and a final wire projection. The role recovery and `Array.isArray(last.tool_calls)` branch are gone, while string/array/null output forms remain unchanged ([Chat](../packages/plugin-openai-chat-completions/src/OpenAIChatCompletionsUpstream.ts#L38), [Anthropic](../packages/plugin-anthropic-messages/src/AnthropicMessages.ts#L45)). This is an in-process change; tests cross the existing pure conversion interfaces directly.
+1. **Characterize current behavior.** Record accepted and rejected input, native JSON/SSE output, error reason/path, and unchanged caller input. Include shorthand input, parts, empty content, tool-only messages, mixed calls/results, omitted/null/empty tools, instruction sources, and unsupported variants.
+2. **Replace outgoing construction state.** Use target-specific tagged drafts and required readonly collections, then encode the native string/array/null form once. Preserve provider grouping; Chat function calls and Anthropic tool-use blocks are not interchangeable.
+3. **Parse native ingress once.** Keep protocol facts such as stream options alongside the decoded request if the HTTP projection needs them. A separate Generation Schema decode proves a different boundary; do not repeat the native body decode merely to recover a field.
+4. **Specify stream identity before changing it.** The [OpenAI](../packages/provider-openai/src/GenerationAssembler.ts) and [Anthropic](../packages/provider-anthropic/src/GenerationAssembler.ts) assemblers currently use anonymous native text and one message index. The [historical text-tool-text characterization](data-normalization-research.md#native-stream-identity) remains a reason to test ordering explicitly. Decide whether native text blocks become distinct parts or output items before adding identity-bearing operations. Full Responses events must retain their richer event model.
+5. **Share error facts only when policy matches.** Common status/category facts may be useful, while each protocol retains its native error envelope and stream framing. Provider-specific retryability and terminal handling require their own tests.
 
-**2. [Implemented] Parse each native ingress once.** Chat's `parseRequest` returns the canonical request plus `{ stream, hasStreamOptions, includeUsage }`; the public `toResponseRequest(value)` delegates to that result, and the HTTP handler consumes it without a second decode ([handler](../packages/plugin-openai-chat-completions/src/OpenAIChatCompletionsHttp.ts#L243), [parser](../packages/plugin-openai-chat-completions/src/OpenAIChatCompletions.ts#L205)). The `stream_options`-requires-stream rule, `include_usage`, and `include_obfuscation` behavior are preserved. The remaining `only`/`required` calls still own semantic rejection and are not replaced by duplicate wrappers.
+Each slice should replace its old path rather than keep parallel conversion pipelines. The normalization pilot's outcomes are historical evidence; current behavior is verified at the existing package boundaries.
 
-**3. [Implemented selectively] Normalize repeated ingress facts before projecting semantics.** Responses now walks decoded input items and nested content once, collecting unsupported-item, unsupported-part, and invalid-image facts in an immutable `InputFacts` shape. It reports them in the previous precedence order, so an unsupported item still wins over nested image validation and an unsupported field still wins over image format validation ([Responses parser](../packages/plugin-openai-responses/src/OpenAIResponsesHttp.ts#L30)). A cross-provider request view is deliberately not introduced yet: Chat and Anthropic still have target-specific role, image, tool, and source-form rules, and the current code does not justify a new shared seam.
+## Completion gate
 
-**4. Treat stream identity as its own behavior change.** The existing `NativeChunk.text` is anonymous, and `GenerationEvents` keeps one `messageIndex` ([source](../packages/core/src/GenerationEvents.ts#L5)). A synthetic Anthropic `text A -> tool -> text B` sequence currently becomes `text AB -> tool` ([reproduction](data-normalization-research.md#L79)). First specify whether separate text blocks become separate content parts or output items while preserving their order relative to calls. Add a failing observable test at `fromNative` and a fake-`HttpClient` adapter test for that policy. Only then extend native operations with stable block/item identity and explicit lifecycle events; keep one immutable, subscription-local assembler. Update Chat and Anthropic ingress/egress and the matrix cases that consume these canonical events. Check duplicate starts/stops, unfinished streams, terminal events, usage, second subscriptions, and cancellation. Do not route the full Responses stream through this smaller native-operation model.
+- Accepted/rejected input, native output, event order, sequence numbers, terminal resources, statuses, reasons, and nested paths match the stated contract. A deliberate behavior fix has a regression expectation.
+- Callers consume proven required fields or tagged variants; the old branches and casts disappear. No new bag of shape-repair wrappers replaces them.
+- Pure conversion preserves its input. Streams initialize state per subscription, retain backpressure, and release resources on interruption. Fallback stops after the first semantic event has been exposed.
+- Protocol conversion, provider execution, Registry preflight, and scoped lifecycle are tested at their own boundaries. Start from [protocol conversion tests](../packages/protocol-openai-chat-completions/test/Convert.test.ts), [provider tests](../packages/provider-anthropic/test/AnthropicMessages.test.ts), [Generation process tests](../packages/core/test/GenerationProcess.test.ts), and [routing tests](../packages/core/test/Routing.test.ts).
+- Run affected checks in `devenv`, then `devenv shell -- yarn check` and `devenv shell -- yarn build`. Run `devenv shell -- yarn generate:openresponses --check` when pinned generated wire types or Schemas change. Follow [testing.md](testing.md) and review changed code for the immutable functional conventions in [AGENTS.md](../AGENTS.md).
 
-**5. Consider shared error facts last.** After removing shape-driven errors, compare the remaining HTTP classification branches. Extract shared facts only for genuinely identical mappings; each protocol keeps its own error envelope, SSE failure framing, authentication conventions, and upstream retry decisions. This slice may legitimately make no code change.
-
-Each slice replaces its old path before deleting helpers; do not retain parallel old and new conversion pipelines indefinitely. Keep PRs focused on one observable interface and update [architecture](architecture.md) if stream or router/plugin contracts change.
-
-## Implementation result
-
-The implementation stays inside existing conversion modules; it does not change `GenerationRequest`, router contracts, provider envelopes, or native stream contracts.
-
-| Before                                                           | After                                                                                                                                   |
-| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Native drafts were flexible records or string-or-array unions    | Chat uses typed message/call/tool drafts; Anthropic uses tagged message content and typed blocks                                        |
-| Chat handler decoded the same body twice                         | `parseRequest` returns one canonical request plus ingress facts; `toResponseRequest` remains a compatibility projection                 |
-| Responses used three flatMap/find passes for input facts         | `InputFacts` collects item, part, and image observations in one immutable traversal with old error precedence                           |
-| Mixed calls/results and source-form preservation lacked coverage | Chat, Anthropic, and Responses tests cover adjacent calls/results, omitted/null/empty tools, input immutability, and nested error paths |
-
-The native JSON remains equivalent at the tested observable shape: ordinary strings remain strings, part arrays remain arrays, tool-only assistants retain `content: null`, function arguments remain JSON strings, and `tools` omission/presence is unchanged. The Anthropic encoder is explicit because its tagged draft differs from wire JSON; Chat's final request is already the wire shape. Responses keeps the complete decoded request and only normalizes the local validation facts.
-
-The source files grew where invariant-bearing draft types and ingress facts are explicit. That is not a quality regression by itself: the old shape-repair branches were removed, and the new code is judged by fewer repeated proofs plus output/error parity, not by line count.
-
-Verification for the rollout: `devenv shell -- yarn check` passed the full build, 4 type-test files / 11 tests, and 22 runtime test files / 53 tests. Focused conversion tests and `devenv shell -- prettier --check` also pass; native stream identity remains documented by the existing characterization and is not changed by this rollout.
-
-## Completion gate for each slice
-
-- **Behavior:** Accepted and rejected inputs, native JSON, full terminal response, streamed event order and sequence numbers, statuses, error reasons/paths, and input immutability match the stated contract. A deliberate behavior fix has an explicit regression expectation and is not described as a pure refactor.
-- **Shape:** Callers receive a required field or a tagged variant without repeating shape proofs; no replacement bag of `isX`/`asX`/`requireX` helpers appears. The old branches and casts are actually removed. Keep useful local protocol helpers when their removal would spread rules.
-- **Ownership:** Public OpenResponses and router interfaces stay stable unless an explicitly reviewed contract change is necessary. Keep source-aware views private first; align module layout with [repository conventions](../AGENTS.md#L5).
-- **Resource safety:** Pure transitions are immutable; streams initialize state per subscription, honor backpressure and interruption, and release scoped upstream resources. Keep the existing pre-first-event fallback and no-replay-after-output behavior ([Router](../packages/core/src/Router.ts#L215), [testing guide](testing.md#L7)).
-- **Verification:** Run affected runtime/type tests in `devenv`, then `devenv shell -- yarn check` and `devenv shell -- yarn build`. Run `devenv shell -- yarn generate:openresponses --check` only if the pinned generated source or schemas are involved. Review all owned code, tests, examples, scripts, and build configuration for forbidden mutation/syntax ([AGENTS.md](../AGENTS.md#L7)).
-
-The result is successful when each module's interface asks callers to learn fewer representational special cases without losing protocol distinctions. Deleting a helper without simplifying its callers is not completion.
+Success means each module asks callers to learn fewer representational special cases while preserving native protocol semantics.
